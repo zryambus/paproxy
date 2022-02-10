@@ -11,12 +11,10 @@ pub struct Cfg {
     pub host: String,
 }
 
-pub fn get_config() -> Arc<Cfg> {
+pub fn get_config() -> anyhow::Result<Arc<Cfg>> {
     let cfg: Cfg = Config::default()
-        .with_merged(config::File::with_name("config.yml"))
-        .unwrap()
-        .try_into()
-        .unwrap();
+        .with_merged(config::File::with_name("config.yml"))?
+        .try_into()?;
 
-    cfg.into()
+    Ok(cfg.into())
 }
