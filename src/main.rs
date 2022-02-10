@@ -2,12 +2,14 @@ mod cfg;
 mod ws;
 mod tls;
 mod router;
+mod shutdown;
 
 use std::{net::SocketAddr};
 use router::get_router;
 use cfg::{get_config};
 use tracing_subscriber::{prelude::*, registry::Registry, fmt};
 use tracing::level_filters::LevelFilter;
+use shutdown::shutdown_signal;
 
 async fn main_impl() -> anyhow::Result<()> {
     tracing::info!("Logging subsystem initialized correctly");
@@ -21,6 +23,7 @@ async fn main_impl() -> anyhow::Result<()> {
     Ok(
         axum::Server::bind(&addr)
             .serve(router.into_make_service())
+            .with_graceful_shutdown(shutdown_signal())
             .await?
     )
 }
