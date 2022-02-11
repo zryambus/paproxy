@@ -11,7 +11,7 @@ axum = { version = "0.4.3", features = ["ws"] }
 anyhow = "1.0.52"
 tokio = { version = "1.0", features = ["full"] }
 hyper = { version = "0.14", features = ["full"] }
-tower-http = { version = "0.2.0", features = ["fs", "cors"] }
+tower-http = { version = "0.2.2", features = ["fs", "cors"] }
 hyper-tls = "0.5.0"
 native-tls = "0.2.8"
 tokio-tungstenite = { version = "0.16.1", features = ["native-tls"] }
