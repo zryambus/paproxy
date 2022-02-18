@@ -14,7 +14,7 @@ hyper = { version = "0.14", features = ["full"] }
 tower-http = { version = "0.2.2", features = ["fs", "cors"] }
 hyper-tls = "0.5.0"
 native-tls = "0.2.8"
-tokio-tungstenite = { version = "0.16.1", features = ["native-tls"] }
+tokio-tungstenite = { version = "0.17.0", features = ["native-tls"] }
 url = "2.2.2"
 futures-util = "0.3.21"
 config = { version = "0.11.0", features = ["yaml"] }
