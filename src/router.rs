@@ -36,10 +36,17 @@ async fn handler(
             .unwrap_or(path);
     
         let uri = format!("https://{}{}", cfg.host, path_query);
-    
+
         *req.uri_mut() = Uri::try_from(uri)?;
+
+        let headers = req.headers_mut();
+        if headers.contains_key(http::header::HOST) {
+            headers.insert(http::header::HOST, cfg.host.parse()?);
+        }
     
-        Ok(client.request(req).await?)
+        let response = client.request(req).await?;
+
+        Ok(response)
     }
 
     match handler_impl(client, cfg, req).await {

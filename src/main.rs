@@ -4,11 +4,12 @@ mod tls;
 mod router;
 mod shutdown;
 
-use std::{net::SocketAddr};
-use router::get_router;
-use cfg::{get_config};
+use std::net::SocketAddr;
 use tracing_subscriber::{prelude::*, registry::Registry, fmt};
 use tracing::level_filters::LevelFilter;
+
+use router::get_router;
+use cfg::get_config;
 use shutdown::shutdown_signal;
 
 async fn main_impl() -> anyhow::Result<()> {
