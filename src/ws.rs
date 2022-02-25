@@ -15,12 +15,13 @@ pub fn axum_to_tungstein(msg: AxumWsMessage) -> TungsteniteWsMessage {
     }
 }
 
-pub fn tungstein_to_axum(msg: TungsteniteWsMessage) -> AxumWsMessage {
+pub fn tungstein_to_axum(msg: TungsteniteWsMessage) -> Option<AxumWsMessage> {
     match msg {
-        TungsteniteWsMessage::Text(text) => AxumWsMessage::Text(text),
-        TungsteniteWsMessage::Binary(data) => AxumWsMessage::Binary(data),
-        TungsteniteWsMessage::Ping(data) => AxumWsMessage::Ping(data),
-        TungsteniteWsMessage::Pong(data) => AxumWsMessage::Pong(data),
-        TungsteniteWsMessage::Close(_) => AxumWsMessage::Close(None),
+        TungsteniteWsMessage::Text(text) => AxumWsMessage::Text(text).into(),
+        TungsteniteWsMessage::Binary(data) => AxumWsMessage::Binary(data).into(),
+        TungsteniteWsMessage::Ping(data) => AxumWsMessage::Ping(data).into(),
+        TungsteniteWsMessage::Pong(data) => AxumWsMessage::Pong(data).into(),
+        TungsteniteWsMessage::Close(_) => AxumWsMessage::Close(None).into(),
+        TungsteniteWsMessage::Frame(_) => None,
     }
 }

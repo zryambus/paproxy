@@ -88,7 +88,13 @@ async fn handle_socket(proxy_socket: WebSocket, cfg: Arc<Cfg>) {
                     return;
                 };
 
-                if let Err(e) = proxy_ws_writer.send(tungstein_to_axum(msg)).await {
+                let ws_msg = if let Some(msg) = tungstein_to_axum(msg) {
+                    msg 
+                } else {
+                    continue
+                };
+
+                if let Err(e) = proxy_ws_writer.send(ws_msg).await {
                     tracing::info!("WebSocket error: {}", e);
                 }
             }
