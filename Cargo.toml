@@ -7,7 +7,7 @@ repository = "https://github.com/zryambus/paproxy"
 license-file = "LICENSE"
 
 [dependencies]
-axum = { version = "0.4.6", features = ["ws"] }
+axum = { version = "0.4.7", features = ["ws"] }
 anyhow = "1.0.55"
 tokio = { version = "1.17", features = ["full"] }
 hyper = { version = "0.14", features = ["full"] }
