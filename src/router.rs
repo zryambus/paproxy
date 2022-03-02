@@ -1,7 +1,7 @@
 use std::{sync::Arc};
 
 use axum::{
-    Router, AddExtensionLayer,
+    Router,
     routing::{get, MethodRouter, get_service},
     extract::{ws::WebSocket, WebSocketUpgrade, Extension},
     response::{IntoResponse, Response}
@@ -145,7 +145,7 @@ pub fn get_router(cfg: Arc<Cfg>) -> anyhow::Result<Router> {
             )
             .route("/polyanalyst/eventsSocket", get(ws))
             .fallback(get(handler).post(handler))
-            .layer(AddExtensionLayer::new(client))
-            .layer(AddExtensionLayer::new(cfg.clone()))
+            .layer(Extension(client))
+            .layer(Extension(cfg.clone()))
     )
 }
