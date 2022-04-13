@@ -17,7 +17,7 @@ native-tls = "0.2.10"
 tokio-tungstenite = { version = "0.17.1", features = ["native-tls"] }
 url = "2.2.2"
 futures-util = "0.3.21"
-config = { version = "0.13.0", features = ["yaml"] }
+config = { version = "0.13.1", features = ["yaml"] }
 serde_derive = "1.0.136"
 serde = "1.0.136"
 tracing = "0.1.32"
