@@ -39,7 +39,7 @@ fn main() {
         .try_init()
         .expect("Could not initialize logging subsystem");
 
-    let rt = tokio::runtime::Runtime::new().unwrap();
+    let rt = tokio::runtime::Runtime::new().expect("Could not initialize Tokio runtime");
     if let Err(e) = rt.block_on(main_impl()) {
         tracing::error!("{}", e);
     }

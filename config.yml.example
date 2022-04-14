@@ -2,3 +2,4 @@ port: 3000
 sourcedata: D:\pa\SourceData\www
 help: D:\pa\SourceData\www\help
 host: 192.168.1.10:5043
+pagrid: false

@@ -9,6 +9,7 @@ pub struct Cfg {
     pub sourcedata: String,
     pub help: String,
     pub host: String,
+    pub pagrid: bool,
 }
 
 pub fn get_config() -> anyhow::Result<Arc<Cfg>> {
