@@ -74,7 +74,7 @@ dependencies = [
  "tokio",
  "tokio-tungstenite",
  "tower",
- "tower-http",
+ "tower-http 0.2.5",
  "tower-layer",
  "tower-service",
 ]
@@ -763,7 +763,7 @@ dependencies = [
  "serde_derive",
  "tokio",
  "tokio-tungstenite",
- "tower-http",
+ "tower-http 0.3.0",
  "tracing",
  "tracing-subscriber",
  "url",
@@ -1326,6 +1326,25 @@ dependencies = [
  "http",
  "http-body",
  "http-range-header",
+ "pin-project-lite",
+ "tower",
+ "tower-layer",
+ "tower-service",
+]
+
+[[package]]
+name = "tower-http"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "79dd37121c38240c4b4fe6520332406218bbf876f2f690fe9e406020189366fd"
+dependencies = [
+ "bitflags",
+ "bytes",
+ "futures-core",
+ "futures-util",
+ "http",
+ "http-body",
+ "http-range-header",
  "httpdate",
  "mime",
  "mime_guess",
@@ -1333,7 +1352,6 @@ dependencies = [
  "pin-project-lite",
  "tokio",
  "tokio-util 0.7.0",
- "tower",
  "tower-layer",
  "tower-service",
 ]
