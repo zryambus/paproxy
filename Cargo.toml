@@ -9,7 +9,7 @@ license-file = "LICENSE"
 [dependencies]
 axum = { version = "=0.5.15", features = ["ws"] }
 anyhow = "=1.0.62"
-tokio = { version = "=1.20.1", features = ["full"] }
+tokio = { version = "=1.21.1", features = ["full"] }
 hyper = { version = "=0.14.20", features = ["full"] }
 tower-http = { version = "=0.3.4", features = ["fs", "cors"] }
 hyper-tls = "=0.5.0"
