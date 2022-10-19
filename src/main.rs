@@ -21,12 +21,14 @@ async fn main_impl() -> anyhow::Result<()> {
     let addr = SocketAddr::from(([127, 0, 0, 1], cfg.port));
 
     tracing::info!("Starting proxy server at http://127.0.0.1:{}", cfg.port);
-    Ok(
-        axum::Server::bind(&addr)
-            .serve(router.into_make_service())
-            .with_graceful_shutdown(shutdown_signal())
-            .await?
-    )
+    if let Err(e) = axum::Server::bind(&addr)
+        .serve(router.into_make_service())
+        .with_graceful_shutdown(shutdown_signal())
+        .await
+    {
+        return Err(anyhow::anyhow!(e));
+    }
+    Ok(())
 }
 
 fn main() {

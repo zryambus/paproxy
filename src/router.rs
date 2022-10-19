@@ -15,7 +15,7 @@ use tracing;
 
 use crate::{
     cfg::Cfg,
-    tls::{HTTPSClient, build_tls_connector, build_https_client},
+    tls::{HTTPSClient, build_https_client, build_client_config},
     ws::{axum_to_tungstein, tungstein_to_axum},
 };
 
@@ -45,7 +45,7 @@ async fn handler(
         if headers.contains_key(http::header::HOST) {
             headers.insert(http::header::HOST, cfg.host.parse()?);
         }
-    
+
         let response = client.request(req).await?;
 
         Ok(response)
@@ -72,7 +72,7 @@ async fn handle_socket(proxy_socket: WebSocket, cfg: Arc<Cfg>, req: Request<Body
             .path_and_query()
             .map(|v| v.as_str())
             .unwrap_or(path);
-            
+
             let uri = format!("wss://{}{}", cfg.host, path_query);
             tracing::info!("WS {}", uri);
             
@@ -92,14 +92,14 @@ async fn handle_socket(proxy_socket: WebSocket, cfg: Arc<Cfg>, req: Request<Body
             
             let request = request.body(()).unwrap();
 
-        let tls_connector = build_tls_connector()?;
+        let config = Arc::new(build_client_config());
 
         let (pa_ws_stream, _) = connect_async_tls_with_config(
             request,
             None,
-            Some(tokio_tungstenite::Connector::NativeTls(tls_connector))
+            Some(tokio_tungstenite::Connector::Rustls(config))
         ).await?;
-        
+
         let (mut pa_ws_writer, mut pa_ws_reader) =
             pa_ws_stream.split();
 
