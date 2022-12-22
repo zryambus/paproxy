@@ -45,7 +45,7 @@ async fn handler(
         if headers.contains_key(http::header::HOST) {
             headers.insert(http::header::HOST, cfg.host.parse()?);
         }
-
+        
         let response = client.request(req).await?;
 
         Ok(response)
@@ -79,7 +79,7 @@ async fn handle_socket(proxy_socket: WebSocket, cfg: Arc<Cfg>, req: Request<Body
             let mut request = Request::builder()
                 .uri(uri);
             
-            let headers = request.headers_mut().context("No headers in hrequest")?;
+            let headers = request.headers_mut().context("No headers in request")?;
             for (key, value) in req.headers() {
                 if key == http::header::HOST {
                     headers.insert(key, cfg.host.parse()?);
@@ -177,16 +177,16 @@ pub fn get_router(cfg: Arc<Cfg>) -> anyhow::Result<Router> {
 
 fn get_pa6_router(cfg: Arc<Cfg>, client: HTTPSClient) -> Router {
     Router::new()
-        .nest(
+        .route_service(
             "/polyanalyst/static", 
             get_static_serve_service(&cfg.sourcedata, None)
         )
-        .nest(
+        .route_service(
             "/polyanalyst/help", 
             get_static_serve_service(&cfg.help, None)
         )
         .route("/polyanalyst/eventsSocket", get(ws))
-        .fallback(get(handler).post(handler))
+        .fallback(handler)
         .layer(Extension(client))
         .layer(Extension(cfg.clone()))
 }
@@ -206,15 +206,15 @@ fn get_pag_router(cfg: Arc<Cfg>, client: HTTPSClient) -> Router {
         .route("/api", get(handler).post(handler));
 
     for (route, sub_path) in static_paths {
-        router = router.nest(route, get_static_serve_service(&cfg.sourcedata, sub_path));
+        router = router.route_service(route, get_static_serve_service(&cfg.sourcedata, sub_path));
     }
 
     router
-        .nest(
+        .route_service(
             "/help", 
             get_static_serve_service(&cfg.help, None)
         )
-        .fallback(get(handler).post(handler))
+        .fallback(handler)
         .layer(Extension(client))
         .layer(Extension(cfg.clone()))
 }

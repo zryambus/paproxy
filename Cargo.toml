@@ -7,19 +7,19 @@ repository = "https://github.com/zryambus/paproxy"
 license-file = "LICENSE"
 
 [dependencies]
-axum = { version = "=0.5.17", features = ["ws"] }
-anyhow = "=1.0.66"
-tokio = { version = "=1.21.2", features = ["full"] }
+axum = { version = "=0.6.1", features = ["ws"] }
+anyhow = "=1.0.68"
+tokio = { version = "=1.23.0", features = ["full"] }
 hyper = { version = "=0.14.23", features = ["full"] }
-tower-http = { version = "=0.3.4", features = ["fs", "cors"] }
+tower-http = { version = "=0.3.5", features = ["fs", "cors"] }
 hyper-rustls = "0.23.0"
-rustls = { version = "=0.20.7", features = ["dangerous_configuration"] }
-tokio-tungstenite = { version = "=0.17.2", features = ["__rustls-tls"] }
+rustls = { version = "=0.20.7", features = ["dangerous_configuration", "tls12"] }
+tokio-tungstenite = { version = "=0.18.0", features = ["__rustls-tls"] }
 url = "=2.3.1"
 futures-util = "=0.3.25"
-config = { version = "=0.13.2", features = ["yaml"] }
-serde_derive = "=1.0.145"
-serde = "=1.0.145"
+config = { version = "=0.13.3", features = ["yaml"] }
+serde_derive = "=1.0.151"
+serde = "=1.0.151"
 tracing = "=0.1.37"
 tracing-subscriber = "=0.3.16"
 http = "=0.2.8"

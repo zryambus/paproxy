@@ -5,9 +5,9 @@ use rustls::client::ServerCertVerifier;
 
 pub type HTTPSClient = Client<hyper_rustls::HttpsConnector<HttpConnector>>;
 
-struct Verifier{}
+struct DummyVerifier{}
 
-impl ServerCertVerifier for Verifier {
+impl ServerCertVerifier for DummyVerifier {
     fn verify_server_cert(
         &self,
         _end_entity: &rustls::Certificate,
@@ -19,10 +19,28 @@ impl ServerCertVerifier for Verifier {
     ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
         Ok(rustls::client::ServerCertVerified::assertion())
     }
+
+    fn verify_tls12_signature(
+        &self,
+        _message: &[u8],
+        _cert: &rustls::Certificate,
+        _dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::HandshakeSignatureValid, rustls::Error> {
+        Ok(rustls::client::HandshakeSignatureValid::assertion())
+    }
+
+    fn verify_tls13_signature(
+        &self,
+        _message: &[u8],
+        _cert: &rustls::Certificate,
+        _dss: &rustls::DigitallySignedStruct,
+    ) -> Result<rustls::client::HandshakeSignatureValid, rustls::Error> {
+        Ok(rustls::client::HandshakeSignatureValid::assertion())
+    }
 }
 
 pub fn build_client_config() -> rustls::ClientConfig {
-    let verifier = Arc::new(Verifier{});
+    let verifier = Arc::new(DummyVerifier{});
     let config = rustls::ClientConfig::builder()
         .with_safe_defaults()
         .with_custom_certificate_verifier(verifier)
