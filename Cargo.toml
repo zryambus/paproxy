@@ -13,7 +13,7 @@ tokio = { version = "=1.24.1", features = ["full"] }
 hyper = { version = "=0.14.23", features = ["full"] }
 tower-http = { version = "=0.3.5", features = ["fs", "cors"] }
 hyper-rustls = "0.23.0"
-rustls = { version = "=0.20.7", features = ["dangerous_configuration", "tls12"] }
+rustls = { version = "=0.20.8", features = ["dangerous_configuration", "tls12"] }
 tokio-tungstenite = { version = "=0.18.0", features = ["__rustls-tls"] }
 url = "=2.3.1"
 futures-util = "=0.3.25"
