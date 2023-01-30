@@ -16,7 +16,7 @@ hyper-rustls = "0.23.0"
 rustls = { version = "=0.20.7", features = ["dangerous_configuration", "tls12"] }
 tokio-tungstenite = { version = "=0.18.0", features = ["__rustls-tls"] }
 url = "=2.3.1"
-futures-util = "=0.3.25"
+futures-util = "=0.3.26"
 config = { version = "=0.13.3", features = ["yaml"] }
 serde_derive = "=1.0.152"
 serde = "=1.0.152"
