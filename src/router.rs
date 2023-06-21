@@ -97,6 +97,7 @@ async fn handle_socket(proxy_socket: WebSocket, cfg: Arc<Cfg>, req: Request<Body
         let (pa_ws_stream, _) = connect_async_tls_with_config(
             request,
             None,
+            false,
             Some(tokio_tungstenite::Connector::Rustls(config))
         ).await?;
 
@@ -156,13 +157,6 @@ fn get_static_serve_service(path: &String, sub_path: Option<&str>) -> MethodRout
     };
 
     get_service(ServeDir::new(path))
-        .handle_error(|error: std::io::Error| async move {
-            tracing::error!("{}", error);
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Unhandled internal error: {}", error),
-            )
-        })
 }
 
 pub fn get_router(cfg: Arc<Cfg>) -> anyhow::Result<Router> {
