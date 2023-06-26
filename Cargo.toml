@@ -10,7 +10,7 @@ license-file = "LICENSE"
 axum = { version = "=0.6.18", features = ["ws"] }
 anyhow = "=1.0.71"
 tokio = { version = "=1.28.2", features = ["full"] }
-hyper = { version = "=0.14.26", features = ["full"] }
+hyper = { version = "=0.14.27", features = ["full"] }
 tower-http = { version = "=0.4.1", features = ["fs", "cors"] }
 hyper-rustls = "0.24.0"
 rustls = { version = "=0.21.2", features = ["dangerous_configuration", "tls12"] }
