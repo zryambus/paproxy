@@ -1,9 +1,5 @@
-use tokio_tungstenite::{
-    tungstenite::Message as TungsteniteWsMessage
-};
-use axum::{
-    extract::ws::{Message as AxumWsMessage},
-};
+use tokio_tungstenite::tungstenite::Message as TungsteniteWsMessage;
+use axum::extract::ws::Message as AxumWsMessage;
 
 pub fn axum_to_tungstein(msg: AxumWsMessage) -> TungsteniteWsMessage {
     match msg {

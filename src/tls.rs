@@ -41,11 +41,10 @@ impl ServerCertVerifier for DummyVerifier {
 
 pub fn build_client_config() -> rustls::ClientConfig {
     let verifier = Arc::new(DummyVerifier{});
-    let config = rustls::ClientConfig::builder()
+    rustls::ClientConfig::builder()
         .with_safe_defaults()
         .with_custom_certificate_verifier(verifier)
-        .with_no_client_auth();
-    config
+        .with_no_client_auth()
 }
 
 pub fn build_tls_connector() -> anyhow::Result<hyper_rustls::HttpsConnector<HttpConnector>> {

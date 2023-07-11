@@ -11,7 +11,6 @@ use futures_util::{StreamExt, SinkExt};
 use hyper::{StatusCode, Uri, Request, Body};
 use tokio_tungstenite::{connect_async_tls_with_config, tungstenite::handshake::client::generate_key};
 use tower_http::services::ServeDir;
-use tracing;
 
 use crate::{
     cfg::Cfg,
