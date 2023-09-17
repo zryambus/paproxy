@@ -1,5 +1,5 @@
 
-use std::sync::Arc;
+use std::{sync::Arc, path::PathBuf};
 use config::{Config, FileFormat, File};
 use serde_derive::Deserialize;
 
@@ -12,9 +12,14 @@ pub struct Cfg {
     pub pagrid: bool,
 }
 
-pub fn get_config() -> anyhow::Result<Arc<Cfg>> {
+pub fn get_config(source: Option<PathBuf>) -> anyhow::Result<Arc<Cfg>> {
+    let source = if let Some(source) = source {
+        File::from(source)
+    } else {
+        File::new("config", FileFormat::Yaml)
+    };
     let cfg: Cfg = Config::builder()
-        .add_source(File::new("config", FileFormat::Yaml))
+        .add_source(source)
         .build()?
         .try_deserialize()?;
 

@@ -7,15 +7,24 @@ mod shutdown;
 use std::net::SocketAddr;
 use tracing_subscriber::{prelude::*, registry::Registry, fmt};
 use tracing::level_filters::LevelFilter;
+use clap::Parser;
 
 use router::get_router;
 use cfg::get_config;
 use shutdown::shutdown_signal;
 
+#[derive(Parser)]
+struct Args {
+    #[arg(long)]
+    config: Option<std::path::PathBuf>,
+}
+
 async fn main_impl() -> anyhow::Result<()> {
     tracing::info!("Logging subsystem initialized correctly");
 
-    let cfg = get_config()?;
+    let args = Args::parse();
+
+    let cfg = get_config(args.config)?;
     let router = get_router(cfg.clone())?;
 
     let addr = SocketAddr::from(([127, 0, 0, 1], cfg.port));
