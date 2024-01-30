@@ -5,6 +5,7 @@ mod router;
 mod shutdown;
 
 use std::net::SocketAddr;
+use tokio::net::TcpListener;
 use tracing_subscriber::{prelude::*, registry::Registry, fmt};
 use tracing::level_filters::LevelFilter;
 use clap::Parser;
@@ -28,10 +29,10 @@ async fn main_impl() -> anyhow::Result<()> {
     let router = get_router(cfg.clone())?;
 
     let addr = SocketAddr::from(([127, 0, 0, 1], cfg.port));
+    let listener = TcpListener::bind(addr).await?;
 
     tracing::info!("Starting proxy server at http://127.0.0.1:{}", cfg.port);
-    if let Err(e) = axum::Server::bind(&addr)
-        .serve(router.into_make_service())
+    if let Err(e) = axum::serve(listener, router.into_make_service())
         .with_graceful_shutdown(shutdown_signal())
         .await
     {

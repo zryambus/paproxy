@@ -4,11 +4,11 @@ use anyhow::Context;
 use axum::{
     Router,
     routing::{get, MethodRouter, get_service},
-    extract::{ws::WebSocket, WebSocketUpgrade, Extension},
-    response::{IntoResponse, Response}
+    extract::{ws::WebSocket, WebSocketUpgrade, Extension, Request},
+    response::IntoResponse
 };
 use futures_util::{StreamExt, SinkExt};
-use hyper::{StatusCode, Uri, Request, Body};
+use hyper::{StatusCode, Uri, body::Incoming};
 use tokio_tungstenite::{connect_async_tls_with_config, tungstenite::handshake::client::generate_key};
 use tower_http::services::ServeDir;
 
@@ -21,13 +21,13 @@ use crate::{
 async fn handler(
     Extension(client): Extension<HTTPSClient>,
     Extension(cfg): Extension<Arc<Cfg>>,
-    req: Request<Body>
-) -> std::result::Result<Response<Body>, StatusCode> {
+    req: Request
+) -> std::result::Result<axum::response::Response, StatusCode> {
     async fn handler_impl(
         client: HTTPSClient,
         cfg: Arc<Cfg>,
-        mut req: Request<Body>
-    ) -> anyhow::Result<Response<Body>> {
+        mut req: Request
+    ) -> anyhow::Result<hyper::Response<Incoming>> {
         let path = req.uri().path();
         let path_query = req
             .uri()
@@ -46,12 +46,11 @@ async fn handler(
         }
         
         let response = client.request(req).await?;
-
         Ok(response)
     }
 
     match handler_impl(client, cfg, req).await {
-        Ok(response) => Ok(response),
+        Ok(response) => Ok(response.into_response()),
         Err(e) => {
             tracing::error!("{}", e);
             Err(StatusCode::INTERNAL_SERVER_ERROR)
@@ -59,12 +58,12 @@ async fn handler(
     }
 }
 
-async fn ws(Extension(cfg): Extension<Arc<Cfg>>, ws: WebSocketUpgrade, req: Request<Body>) -> impl IntoResponse {
+async fn ws(Extension(cfg): Extension<Arc<Cfg>>, ws: WebSocketUpgrade, req: Request) -> impl IntoResponse {
     ws.on_upgrade(|ws| handle_socket(ws, cfg, req))
 }
 
-async fn handle_socket(proxy_socket: WebSocket, cfg: Arc<Cfg>, req: Request<Body>) {
-    async fn handler_impl(proxy_socket: WebSocket, cfg: Arc<Cfg>, req: Request<Body>) -> anyhow::Result<()> {
+async fn handle_socket(proxy_socket: WebSocket, cfg: Arc<Cfg>, req: Request) {
+    async fn handler_impl(proxy_socket: WebSocket, cfg: Arc<Cfg>, req: Request) -> anyhow::Result<()> {
         let path = req.uri().path();
         let path_query = req
             .uri()
