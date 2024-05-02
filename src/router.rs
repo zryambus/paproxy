@@ -3,14 +3,14 @@ use std::{sync::Arc, path::PathBuf};
 use anyhow::Context;
 use axum::{
     Router,
-    routing::{get, MethodRouter, get_service},
+    routing::get,
     extract::{ws::WebSocket, WebSocketUpgrade, Extension, Request},
     response::IntoResponse
 };
 use futures_util::{StreamExt, SinkExt};
 use hyper::{StatusCode, Uri, body::Incoming};
 use tokio_tungstenite::{connect_async_tls_with_config, tungstenite::handshake::client::generate_key};
-use tower_http::services::ServeDir;
+use tower_http::{services::ServeDir, trace::TraceLayer};
 
 use crate::{
     cfg::Cfg,
@@ -145,16 +145,12 @@ async fn handle_socket(proxy_socket: WebSocket, cfg: Arc<Cfg>, req: Request) {
     };
 }
 
-fn get_static_serve_service(path: &String, sub_path: Option<&str>) -> MethodRouter {
-    let path = if let Some(sub_path) = sub_path {
-        let mut tmp = PathBuf::from(path);
-        tmp.push(sub_path);
-        tmp
-    } else {
-        path.into()
-    };
+fn get_static_serve_service(path: &String, sub_path: Option<&str>) -> ServeDir {
+    let path = sub_path
+        .map(|sub_path| [path, sub_path].iter().collect::<PathBuf>())
+        .unwrap_or(path.into());
 
-    get_service(ServeDir::new(path))
+    ServeDir::new(path)
 }
 
 pub fn get_router(cfg: Arc<Cfg>) -> anyhow::Result<Router> {
@@ -169,11 +165,11 @@ pub fn get_router(cfg: Arc<Cfg>) -> anyhow::Result<Router> {
 
 fn get_pa6_router(cfg: Arc<Cfg>, client: HTTPSClient) -> Router {
     Router::new()
-        .route_service(
+        .nest_service(
             "/polyanalyst/static", 
             get_static_serve_service(&cfg.sourcedata, None)
         )
-        .route_service(
+        .nest_service(
             "/polyanalyst/help", 
             get_static_serve_service(&cfg.help, None)
         )
@@ -181,6 +177,7 @@ fn get_pa6_router(cfg: Arc<Cfg>, client: HTTPSClient) -> Router {
         .fallback(handler)
         .layer(Extension(client))
         .layer(Extension(cfg.clone()))
+        .layer(TraceLayer::new_for_http())
 }
 
 fn get_pag_router(cfg: Arc<Cfg>, client: HTTPSClient) -> Router {
@@ -198,15 +195,16 @@ fn get_pag_router(cfg: Arc<Cfg>, client: HTTPSClient) -> Router {
         .route("/api", get(handler).post(handler));
 
     for (route, sub_path) in static_paths {
-        router = router.route_service(route, get_static_serve_service(&cfg.sourcedata, sub_path));
+        router = router.nest_service(route, get_static_serve_service(&cfg.sourcedata, sub_path));
     }
 
     router
-        .route_service(
+        .nest_service(
             "/help", 
             get_static_serve_service(&cfg.help, None)
         )
         .fallback(handler)
         .layer(Extension(client))
         .layer(Extension(cfg.clone()))
+        .layer(TraceLayer::new_for_http())
 }
