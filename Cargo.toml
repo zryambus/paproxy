@@ -13,7 +13,7 @@ tokio = { version = "=1.42.0", features = ["full"] }
 hyper = { version = "=1.5.1", features = ["full"] }
 hyper-util = "=0.1.10"
 tower-http = { version = "=0.6.2", features = ["fs", "cors", "trace"] }
-hyper-rustls = "=0.27.3"
+hyper-rustls = "=0.27.5"
 rustls = { version = "=0.23.20", features = ["tls12"] }
 http-body-util = "=0.1.2"
 bytes = "=1.9.0"
