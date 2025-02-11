@@ -7,26 +7,26 @@ repository = "https://github.com/zryambus/paproxy"
 license-file = "LICENSE"
 
 [dependencies]
-axum = { version = "=0.7.9", features = ["ws"] }
-anyhow = "=1.0.94"
-tokio = { version = "=1.42.0", features = ["full"] }
-hyper = { version = "=1.5.1", features = ["full"] }
+axum = { version = "=0.8.1", features = ["ws"] }
+anyhow = "=1.0.95"
+tokio = { version = "=1.43.0", features = ["full"] }
+hyper = { version = "=1.6.0", features = ["full"] }
 hyper-util = "=0.1.10"
 tower-http = { version = "=0.6.2", features = ["fs", "cors", "trace"] }
-hyper-rustls = "=0.27.3"
-rustls = { version = "=0.23.20", features = ["tls12"] }
+hyper-rustls = "=0.27.5"
+rustls = { version = "=0.23.22", features = ["tls12"] }
 http-body-util = "=0.1.2"
-bytes = "=1.9.0"
-tokio-tungstenite = { version = "=0.24.0", features = ["__rustls-tls"] }
+bytes = "=1.10.0"
+tokio-tungstenite = { version = "=0.26.1", features = ["__rustls-tls"] }
 url = "=2.5.4"
 futures-util = "=0.3.31"
-config = { version = "=0.14.1", features = ["yaml"] }
-serde_derive = "=1.0.216"
-serde = "=1.0.216"
+config = { version = "=0.15.8", features = ["yaml"] }
+serde_derive = "=1.0.217"
+serde = "=1.0.217"
 tracing = "=0.1.41"
 tracing-subscriber = "=0.3.19"
 http = "=1.2.0"
-clap = { version = "=4.5.23", features = ["derive"] }
+clap = { version = "=4.5.28", features = ["derive"] }
 
 [[bin]]
 name = "paproxy"
