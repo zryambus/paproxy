@@ -160,11 +160,25 @@ pub fn get_router(cfg: Arc<Cfg>) -> anyhow::Result<Router> {
     } else {
         Ok(get_pa6_router(cfg, client))
     }
+}
 
+macro_rules! help_path {
+    ($prefix:expr, $path:expr) => {
+        &($prefix.to_owned() + $path)
+    };
+}
+
+fn get_pa6_help_subrouter(prefix: &str) -> Router {
+    Router::new()
+        .route(help_path!(prefix, "/search"), get(handler))
+        .route(help_path!(prefix, "/searchprogress"), get(handler))
+        .route(help_path!(prefix, "/context/node-view"), get(handler))
+        .route(help_path!(prefix, "/context/node-wizard"), get(handler))
 }
 
 fn get_pa6_router(cfg: Arc<Cfg>, client: HTTPSClient) -> Router {
     Router::new()
+        .merge(get_pa6_help_subrouter("/polyanalyst/help"))
         .nest_service(
             "/polyanalyst/static", 
             get_static_serve_service(&cfg.sourcedata, None)
