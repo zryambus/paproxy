@@ -190,7 +190,7 @@ pub fn get_router(cfg: Arc<Cfg>, app: Arc<App>, transparent: bool) -> anyhow::Re
     if cfg.pagrid {
         Ok(get_pag_router(cfg, client, app, transparent))
     } else {
-        Ok(get_pa6_router(cfg, client, app))
+        Ok(get_pa6_router(cfg, client, app, transparent))
     }
 }
 
@@ -208,17 +208,22 @@ fn get_pa6_help_subrouter(prefix: &str) -> Router {
         .route(help_path!(prefix, "/context/node-wizard"), get(handler))
 }
 
-fn get_pa6_router(cfg: Arc<Cfg>, client: HTTPSClient, app: Arc<App>) -> Router {
-    Router::new()
-        .merge(get_pa6_help_subrouter("/polyanalyst/help"))
-        .nest_service(
+fn get_pa6_router(cfg: Arc<Cfg>, client: HTTPSClient, app: Arc<App>, transparent: bool) -> Router {
+    let mut router = Router::new()
+        .merge(get_pa6_help_subrouter("/polyanalyst/help"));
+    
+    if !transparent {
+        router = router.nest_service(
             "/polyanalyst/static", 
             get_static_serve_service(&cfg.sourcedata, None)
         )
         .nest_service(
             "/polyanalyst/help", 
             get_static_serve_service(&cfg.help, None)
-        )
+        );
+    }
+    
+    router
         .route("/polyanalyst/eventsSocket", get(ws))
         .fallback(handler)
         .layer(Extension(client))
