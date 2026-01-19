@@ -7,7 +7,7 @@ mod state;
 mod tui;
 mod app;
 
-use std::{net::SocketAddr, str::FromStr, sync::Arc};
+use std::{net::SocketAddr, str::FromStr};
 
 use tokio::net::TcpListener;
 use tracing_subscriber::{prelude::*, registry::Registry};
@@ -34,9 +34,9 @@ async fn main_impl(args: Args) -> anyhow::Result<()> {
     tracing::info!("Logging subsystem initialized correctly");
 
     let cfg = get_config(args.config)?;
-    let app = Arc::new(App::new());
-    let router = get_router(cfg.clone(), app.clone(), args.transparent)?;
+    let mut app = App::new();
     let state = app.state();
+    let router = get_router(cfg.clone(), state.clone(), args.transparent)?;
 
     let addr = SocketAddr::from(([0, 0, 0, 0], cfg.port));
     let listener = TcpListener::bind(addr).await?;

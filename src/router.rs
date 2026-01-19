@@ -12,13 +12,13 @@ use tokio_tungstenite::{connect_async_tls_with_config, tungstenite::handshake::c
 use tower_http::{services::ServeDir, trace::TraceLayer};
 
 use crate::{
-    app::App, cfg::Cfg, state::State, tls::{HTTPSClient, build_client_config, build_https_client}, ws::{axum_to_tungstein, tungstein_to_axum}
+    cfg::Cfg, state::State, tls::{HTTPSClient, build_client_config, build_https_client}, ws::{axum_to_tungstein, tungstein_to_axum}
 };
 
 async fn handler(
     Extension(client): Extension<HTTPSClient>,
     Extension(cfg): Extension<Arc<Cfg>>,
-    Extension(app): Extension<Arc<App>>,
+    Extension(state): Extension<Arc<State>>,
     req: Request
 ) -> std::result::Result<axum::response::Response, StatusCode> {
     async fn handler_impl(
@@ -71,7 +71,7 @@ async fn handler(
         Ok(r)
     }
 
-    match handler_impl(client, cfg, app.state(), req).await {
+    match handler_impl(client, cfg, state, req).await {
         Ok(response) => Ok(response.into_response()),
         Err(e) => {
             tracing::error!("{}", e);
@@ -80,8 +80,8 @@ async fn handler(
     }
 }
 
-async fn ws(Extension(cfg): Extension<Arc<Cfg>>, Extension(app): Extension<Arc<App>>, ws: WebSocketUpgrade, req: Request) -> impl IntoResponse {
-    ws.on_upgrade(move |ws| handle_socket(ws, cfg, app.state(), req))
+async fn ws(Extension(cfg): Extension<Arc<Cfg>>, Extension(state): Extension<Arc<State>>, ws: WebSocketUpgrade, req: Request) -> impl IntoResponse {
+    ws.on_upgrade(move |ws| handle_socket(ws, cfg, state, req))
 }
 
 async fn handle_socket(proxy_socket: WebSocket, cfg: Arc<Cfg>, state: Arc<State>, req: Request) {
@@ -185,12 +185,12 @@ fn get_static_serve_service(path: &String, sub_path: Option<&str>) -> ServeDir {
     ServeDir::new(path)
 }
 
-pub fn get_router(cfg: Arc<Cfg>, app: Arc<App>, transparent: bool) -> anyhow::Result<Router> {
+pub fn get_router(cfg: Arc<Cfg>, state: Arc<State>, transparent: bool) -> anyhow::Result<Router> {
     let client = build_https_client()?;
     if cfg.pagrid {
-        Ok(get_pag_router(cfg, client, app, transparent))
+        Ok(get_pag_router(cfg, client, state, transparent))
     } else {
-        Ok(get_pa6_router(cfg, client, app, transparent))
+        Ok(get_pa6_router(cfg, client, state, transparent))
     }
 }
 
@@ -208,7 +208,7 @@ fn get_pa6_help_subrouter(prefix: &str) -> Router {
         .route(help_path!(prefix, "/context/node-wizard"), get(handler))
 }
 
-fn get_pa6_router(cfg: Arc<Cfg>, client: HTTPSClient, app: Arc<App>, transparent: bool) -> Router {
+fn get_pa6_router(cfg: Arc<Cfg>, client: HTTPSClient, state: Arc<State>, transparent: bool) -> Router {
     let mut router = Router::new()
         .merge(get_pa6_help_subrouter("/polyanalyst/help"));
     
@@ -228,11 +228,11 @@ fn get_pa6_router(cfg: Arc<Cfg>, client: HTTPSClient, app: Arc<App>, transparent
         .fallback(handler)
         .layer(Extension(client))
         .layer(Extension(cfg.clone()))
-        .layer(Extension(app.clone()))
+        .layer(Extension(state.clone()))
         .layer(TraceLayer::new_for_http())
 }
 
-fn get_pag_router(cfg: Arc<Cfg>, client: HTTPSClient, app: Arc<App>, transparent: bool) -> Router {
+fn get_pag_router(cfg: Arc<Cfg>, client: HTTPSClient, state: Arc<State>, transparent: bool) -> Router {
     let static_paths: Vec<(&str, Option<&str>)> = vec![
         ("/fonts", Some("fonts")),
         ("/vendor", Some("vendor")),
@@ -264,6 +264,6 @@ fn get_pag_router(cfg: Arc<Cfg>, client: HTTPSClient, app: Arc<App>, transparent
         .fallback(handler)
         .layer(Extension(client))
         .layer(Extension(cfg.clone()))
-        .layer(Extension(app.clone()))
+        .layer(Extension(state.clone()))
         .layer(TraceLayer::new_for_http())
 }

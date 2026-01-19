@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, AtomicU64};
+use std::sync::{atomic::{AtomicBool, AtomicU64}};
 
 use dashmap::DashMap;
 
@@ -15,7 +15,7 @@ impl State {
             url_traffic: DashMap::new(),
             http_traffic: AtomicU64::new(0),
             ws_traffic: AtomicU64::new(0),
-            shutdown: AtomicBool::new(false)
+            shutdown: AtomicBool::new(false),
         }
     }
 
