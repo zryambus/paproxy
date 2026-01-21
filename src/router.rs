@@ -1,12 +1,13 @@
-use std::{sync::Arc, path::PathBuf};
+use std::{path::PathBuf, sync::{Arc, atomic::AtomicU32}};
 
 use anyhow::Context;
 use axum::{
     Router, extract::{Extension, Request, WebSocketUpgrade, ws::WebSocket}, response::{IntoResponse, Response}, routing::get
 };
 use futures_util::{SinkExt, StreamExt};
-use http::header;
+use http::{Method, header};
 use http_body_util::BodyExt;
+use human_bytes::human_bytes;
 use hyper::{StatusCode, Uri};
 use tokio_tungstenite::{connect_async_tls_with_config, tungstenite::handshake::client::generate_key};
 use tower_http::{services::ServeDir, trace::TraceLayer};
@@ -14,6 +15,40 @@ use tower_http::{services::ServeDir, trace::TraceLayer};
 use crate::{
     cfg::Cfg, state::State, tls::{HTTPSClient, build_client_config, build_https_client}, ws::{axum_to_tungstein, tungstein_to_axum}
 };
+
+struct TrafficCounter {
+    sent: u32,
+    received: AtomicU32,
+    method: Method,
+    path: String
+}
+
+impl TrafficCounter {
+    pub fn new(sent: u32, method: Method, path: String) -> Self {
+        Self {
+            sent,
+            received: AtomicU32::new(0),
+            method,
+            path,
+        }
+    }
+
+    pub fn update_received(&self, count: u32) {
+        self.received.fetch_add(count, std::sync::atomic::Ordering::AcqRel);
+    }
+}
+
+impl Drop for TrafficCounter {
+    fn drop(&mut self) {
+        tracing::info!(
+            "{} {} sent: {}, received: {}",
+            self.method,
+            self.path,
+            human_bytes(self.sent),
+            human_bytes(self.received.load(std::sync::atomic::Ordering::Relaxed)
+        ));
+    }
+}
 
 async fn handler(
     Extension(client): Extension<HTTPSClient>,
@@ -33,10 +68,9 @@ async fn handler(
             .path_and_query()
             .map(|v| v.as_str())
             .unwrap_or(&path);
+        let method = req.method().clone();
     
         let uri = format!("https://{}{}", cfg.host, path_query);
-        tracing::info!("{} {}", req.method(), uri);
-        
         *req.uri_mut() = Uri::try_from(uri)?.into();
 
         let headers = req.headers_mut();
@@ -49,17 +83,20 @@ async fn handler(
             .and_then(|str| u64::from_str_radix(str, 10).ok());
 
         if let Some(content_length) = content_length {
-            state.update_sent(&path, content_length)
+            state.update_sent(&path, content_length);
         };
         
         let response = client.request(req).await?;
 
         let (parts, incoming) = response.into_parts();
        
+        let counter = TrafficCounter::new(content_length.unwrap_or_default() as u32, method, path.clone());
+
         let inspected_incoming = incoming.map_frame(move |frame| {
             if let Some(chunk) = frame.data_ref() {
                 let len = chunk.len();
                 state.update_received(&path, len as u64);
+                counter.update_received(len as u32);
             }
             frame
         });
@@ -68,6 +105,7 @@ async fn handler(
         *r.headers_mut() = parts.headers;
         *r.status_mut() = parts.status;
         *r.version_mut() = parts.version;
+
         Ok(r)
     }
 

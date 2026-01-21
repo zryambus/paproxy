@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use crossterm::event::KeyModifiers;
-use ratatui::{Frame, layout::{Constraint, Layout, Margin, Rect}, style::{Color, Style}, text::Line, widgets::{Block, Cell, Clear, Row, Scrollbar, ScrollbarState, Table, TableState}};
+use ratatui::{Frame, layout::{Constraint, Layout, Margin, Rect}, text::Line, widgets::{Block, Cell, Clear, Row, Scrollbar, ScrollbarState, Table, TableState}};
+use tui_logger::{LogFormatter, TuiWidgetState};
 
 use crate::{state::State, tui};
 
@@ -12,16 +13,20 @@ pub struct App {
 
     table_state: TableState,
     scroll_state: ScrollbarState,
+    logs_state: TuiWidgetState,
 
     logs_height: u16,
 }
 
 impl App {
     pub fn new() -> Self {
+        let logs_state = TuiWidgetState::default();
+
         Self {
             state: Arc::new(State::new()),
             scroll_state: ScrollbarState::new(0),
             table_state: TableState::new(),
+            logs_state,
             logs_height: 0
         }
     }
@@ -66,13 +71,8 @@ impl App {
     fn render_logs(&mut self, frame: &mut Frame, area: Rect) {
         let logger_widget = tui_logger::TuiLoggerWidget::default()
             .block(Block::bordered().title(Line::from("Log").centered()))
-            .style(Style::default().fg(Color::Gray))
-            .style_error(Style::default().fg(Color::Red))
-            .style_warn(Style::default().fg(Color::Yellow))
-            .output_timestamp(Some("%H:%M:%S%.3f".to_string()))
-            .output_target(false)
-            .output_file(false)
-            .output_line(false);
+            .opt_formatter(Some(Box::new(LogsFormatter{})))
+            .state(&self.logs_state);
         frame.render_widget(logger_widget, area);
     }
 
@@ -150,6 +150,7 @@ impl App {
                 match mouse_evt.kind {
                     crossterm::event::MouseEventKind::ScrollDown => {
                         if mouse_evt.row <= self.logs_height {
+                            self.logs_state.transition(tui_logger::TuiWidgetEvent::NextPageKey);
                         } else {
                             self.scroll_state.next();
                             self.table_state = self.table_state.with_offset(self.scroll_state.get_position());
@@ -157,6 +158,7 @@ impl App {
                     },
                     crossterm::event::MouseEventKind::ScrollUp => {
                         if mouse_evt.row <= self.logs_height {
+                            self.logs_state.transition(tui_logger::TuiWidgetEvent::PrevPageKey);
                         } else {
                             self.scroll_state.prev();
                             self.table_state = self.table_state.with_offset(self.scroll_state.get_position());
@@ -168,5 +170,24 @@ impl App {
             _ => {}
         }
         None
+    }
+}
+
+struct LogsFormatter {}
+
+impl LogFormatter for LogsFormatter {
+    fn min_width(&self) -> u16 {
+        9 + 4
+    }
+
+    fn format(&self, width: usize, evt: &tui_logger::ExtLogRecord) -> Vec<Line<'_>> {
+        let mut output = String::new();
+        output.push_str(&format!("{} ", evt.timestamp.format("%H:%M:%S%.3f")));
+        output.push_str(&format!("{}: ", evt.level));
+
+        let mut sublines: Vec<&str> = evt.msg().lines().rev().collect();
+        let first_line = sublines.pop().unwrap_or_default();
+        output.push_str(&first_line[..std::cmp::min(first_line.len(), width - output.len())]);
+        [Line::from(output)].into()
     }
 }
