@@ -9,7 +9,9 @@ mod app;
 
 use std::{net::SocketAddr, str::FromStr};
 
+use logroller::LogRollerBuilder;
 use tokio::net::TcpListener;
+use tracing::level_filters::LevelFilter;
 use tracing_subscriber::{prelude::*, registry::Registry};
 use clap::Parser;
 
@@ -61,8 +63,29 @@ fn main() {
         .and_then(|loglevel| tui_logger::LevelFilter::from_str(&loglevel).ok())
         .unwrap_or(tui_logger::LevelFilter::Info);
     
+    let appender = LogRollerBuilder::new("./logs", "paproxy.log")
+        .rotation(logroller::Rotation::SizeBased(logroller::RotationSize::MB(100)))
+        .max_keep_files(5)
+        .time_zone(logroller::TimeZone::Local)
+        .graceful_shutdown(true)
+        .build()
+        .unwrap();
+
+    let (non_blocking, _guard) = tracing_appender::non_blocking(appender);
+
+    let level_filter = LevelFilter::from_str(&args.loglevel.clone().unwrap_or("info".into())).unwrap_or(LevelFilter::INFO);
+
+    let fmt = tracing_subscriber::fmt::layer()
+        .with_writer(non_blocking)
+        .with_ansi(false)
+        .with_target(false)
+        .with_file(false)
+        .with_line_number(false)
+        .with_filter(level_filter);
+
     Registry::default()
         .with(TuiTracingSubscriberLayer)
+        .with(fmt)
         .try_init()
         .expect("Could not initialize logging subsystem");
 

@@ -37,6 +37,8 @@ tui-logger = { version = "=0.18.1", features = ["tracing-support"] }
 tokio-util = "=0.7.18"
 signal-hook = "=0.4.1"
 cookie = "=0.18.1"
+logroller = { version = "0.1.10", features = ["tracing"] }
+tracing-appender = "0.2.4"
 
 [[bin]]
 name = "paproxy"
