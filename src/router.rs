@@ -4,6 +4,7 @@ use anyhow::Context;
 use axum::{
     Router, extract::{Extension, Request, WebSocketUpgrade, ws::WebSocket}, response::{IntoResponse, Response}, routing::get
 };
+use axum_extra::extract::CookieJar;
 use futures_util::{SinkExt, StreamExt};
 use http::{Method, header};
 use http_body_util::BodyExt;
@@ -20,16 +21,18 @@ struct TrafficCounter {
     sent: u32,
     received: AtomicU32,
     method: Method,
-    path: String
+    path: String,
+    session_id: String,
 }
 
 impl TrafficCounter {
-    pub fn new(sent: u32, method: Method, path: String) -> Self {
+    pub fn new(sent: u32, method: Method, path: String, session_id: String) -> Self {
         Self {
             sent,
             received: AtomicU32::new(0),
             method,
             path,
+            session_id
         }
     }
 
@@ -41,7 +44,8 @@ impl TrafficCounter {
 impl Drop for TrafficCounter {
     fn drop(&mut self) {
         tracing::info!(
-            "{} {} sent: {}, received: {}",
+            "{} {} {} sent: {}, received: {}",
+            self.session_id,
             self.method,
             self.path,
             human_bytes(self.sent),
@@ -49,6 +53,11 @@ impl Drop for TrafficCounter {
         ));
     }
 }
+
+const PA6_SESSION_ID_COOKIE_NAME: &'static str = "sid";
+const PAG_SESSION_ID_COOKIE_NAME: &'static str = "SessionID";
+const PA6_NIL_SESSION_ID: &'static str = "0000000000000000";
+const PAG_NIL_SESSION_ID: &'static str = "00000000-0000-0000-0000-000000000000";
 
 async fn handler(
     Extension(client): Extension<HTTPSClient>,
@@ -90,7 +99,25 @@ async fn handler(
 
         let (parts, incoming) = response.into_parts();
        
-        let counter = TrafficCounter::new(content_length.unwrap_or_default() as u32, method, path.clone());
+        let session_id = parts.headers.get_all(http::header::SET_COOKIE).iter().find_map(|header| {
+            if let Ok(header_str) = header.to_str() {
+                if let Ok(cookie) = cookie::Cookie::parse(header_str) {
+                    let target_name = if cfg.pagrid { PAG_SESSION_ID_COOKIE_NAME } else { PA6_SESSION_ID_COOKIE_NAME };
+                    if cookie.name() == target_name {
+                        return Some(cookie.value().to_owned());
+                    }
+                }
+                return None;
+            }
+            None
+        });
+
+        let counter = TrafficCounter::new(
+            content_length.unwrap_or_default() as u32,
+            method,
+            path.clone(),
+            session_id.unwrap_or(if cfg.pagrid { PAG_NIL_SESSION_ID.into() } else { PA6_NIL_SESSION_ID.into() })
+        );
 
         let inspected_incoming = incoming.map_frame(move |frame| {
             if let Some(chunk) = frame.data_ref() {
@@ -100,7 +127,6 @@ async fn handler(
             }
             frame
         });
-
         let mut r = Response::new(inspected_incoming).into_response();
         *r.headers_mut() = parts.headers;
         *r.status_mut() = parts.status;
@@ -131,8 +157,14 @@ async fn handle_socket(proxy_socket: WebSocket, cfg: Arc<Cfg>, state: Arc<State>
             .map(|v| v.as_str())
             .unwrap_or(path);
 
+        let jar = CookieJar::from_headers(req.headers());
+        let session_id = jar
+            .get(if cfg.pagrid { PAG_SESSION_ID_COOKIE_NAME } else { PA6_SESSION_ID_COOKIE_NAME })
+            .and_then(|c| Some(c.value()))
+            .unwrap_or(if cfg.pagrid { PAG_NIL_SESSION_ID } else { PA6_NIL_SESSION_ID });
+
         let uri = format!("wss://{}{}", cfg.host, path_query);
-        tracing::info!("WS {}", uri);
+        tracing::info!("{} WS {}", session_id, path_query);
         
         let mut request = Request::builder()
             .uri(uri);

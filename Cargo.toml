@@ -8,6 +8,7 @@ license-file = "LICENSE"
 
 [dependencies]
 axum = { version = "=0.8.8", features = ["ws"] }
+axum-extra = { version = "=0.12.5", features = ["cookie"] }
 anyhow = "=1.0.100"
 tokio = { version = "=1.49.0", features = ["full"] }
 hyper = { version = "=1.8.1", features = ["full"] }
@@ -35,6 +36,7 @@ ratatui = { version = "=0.30.0", features = ["serde"] }
 tui-logger = { version = "=0.18.1", features = ["tracing-support"] }
 tokio-util = "=0.7.18"
 signal-hook = "=0.4.1"
+cookie = "=0.18.1"
 
 [[bin]]
 name = "paproxy"
