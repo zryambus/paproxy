@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use crossterm::event::KeyModifiers;
+use dashmap::DashMap;
 use ratatui::{Frame, layout::{Constraint, Layout, Margin, Rect}, text::Line, widgets::{Block, Cell, Clear, Row, Scrollbar, ScrollbarState, Table, TableState}};
 use tui_logger::{LogFormatter, TuiWidgetState};
 
@@ -143,6 +144,12 @@ impl App {
                     crossterm::event::KeyCode::Char('c') | crossterm::event::KeyCode::Char('с') if key_evt.modifiers.contains(KeyModifiers::CONTROL) => {
                         self.state.shutdown();
                     },
+                    crossterm::event::KeyCode::Char('d') | crossterm::event::KeyCode::Char('в') => {
+                        let state = self.state().clone();
+                        tokio::task::spawn_blocking(move || {
+                            dump_results(state.get_info()).ok();
+                        });
+                    }
                     _ => {}
                 }
             },
@@ -173,6 +180,12 @@ impl App {
     }
 }
 
+impl Drop for App {
+    fn drop(&mut self) {
+        dump_results(self.state.get_info()).ok();
+    }
+}
+
 struct LogsFormatter {}
 
 impl LogFormatter for LogsFormatter {
@@ -190,4 +203,23 @@ impl LogFormatter for LogsFormatter {
         output.push_str(&first_line[..std::cmp::min(first_line.len(), width - output.len())]);
         [Line::from(output)].into()
     }
+}
+
+use std::io::Write;
+
+fn dump_results(results: &DashMap<String, (u64, u64)>) -> anyhow::Result<()> {
+    let path = "logs/results.csv";
+    simple_file_rotation::FileRotation::new(path)
+        .max_old_files(5)
+        .file_extension("csv")
+        .rotate()?;
+
+    let mut file = std::fs::File::create(path)?;
+
+    writeln!(file, "\"path\", \"tx\", \"rx\"")?;
+    for r in results.iter() {
+        let (path, (tx, rx)) = (r.key(), (r.0, r.1));
+        writeln!(file, "\"{}\", {}, {}", path, tx, rx)?;
+    }
+    Ok(())
 }

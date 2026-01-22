@@ -1713,6 +1713,7 @@ dependencies = [
  "serde",
  "serde_derive",
  "signal-hook 0.4.1",
+ "simple-file-rotation",
  "tokio",
  "tokio-tungstenite",
  "tokio-util",
@@ -2450,6 +2451,12 @@ name = "simd-adler32"
 version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e320a6c5ad31d271ad523dcf3ad13e2767ad8b1cb8f047f75a8aeaf8da139da2"
+
+[[package]]
+name = "simple-file-rotation"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d6051b142df5f7ad8f3c96d564824d4e07c4c0e29cba0d3388af9b23051f7b74"
 
 [[package]]
 name = "siphasher"
