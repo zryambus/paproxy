@@ -12,7 +12,7 @@ axum-extra = { version = "=0.12.5", features = ["cookie"] }
 anyhow = "=1.0.100"
 tokio = { version = "=1.49.0", features = ["full"] }
 hyper = { version = "=1.8.1", features = ["full"] }
-hyper-util = "=0.1.19"
+hyper-util = "=0.1.20"
 tower-http = { version = "=0.6.8", features = ["fs", "cors", "trace"] }
 hyper-rustls = "=0.27.7"
 rustls = { version = "=0.23.36", features = ["tls12"] }
