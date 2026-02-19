@@ -3,3 +3,4 @@ config.yml
 /.vscode
 /build
 /logs
+node_modules
