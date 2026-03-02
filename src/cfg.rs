@@ -1,5 +1,6 @@
 
 use std::{sync::Arc, path::PathBuf};
+use anyhow::Context;
 use config::{Config, FileFormat, File};
 use serde_derive::Deserialize;
 
@@ -23,8 +24,10 @@ pub fn get_config(source: Option<PathBuf>) -> anyhow::Result<Arc<Cfg>> {
     };
     let cfg: Cfg = Config::builder()
         .add_source(source)
-        .build()?
-        .try_deserialize()?;
+        .build()
+        .context("Failed to build config")?
+        .try_deserialize()
+        .context("Failed to parse config")?;
 
     Ok(cfg.into())
 }

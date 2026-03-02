@@ -133,7 +133,8 @@ fn main() {
 
     let rt = tokio::runtime::Runtime::new().expect("Could not initialize Tokio runtime");
     if let Err(e) = rt.block_on(main_impl(args)) {
-        tracing::error!("{}", e);
+        tracing::error!("Exiting with error: {}", e);
+        eprintln!("Exiting with error: {:?}", e);
     }
 }
 
