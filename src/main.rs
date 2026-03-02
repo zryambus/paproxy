@@ -7,13 +7,14 @@ mod state;
 mod tui;
 mod app;
 
-use std::{net::SocketAddr, str::FromStr};
+use std::{net::SocketAddr, path::PathBuf, str::FromStr};
 
 use logroller::LogRollerBuilder;
 use tokio::net::TcpListener;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::{prelude::*, registry::Registry};
 use clap::Parser;
+use axum_server::tls_rustls::RustlsConfig;
 
 use router::get_router;
 use cfg::get_config;
@@ -42,6 +43,43 @@ async fn main_impl(args: Args) -> anyhow::Result<()> {
 
     let addr = SocketAddr::from(([0, 0, 0, 0], cfg.port));
     let listener = TcpListener::bind(addr).await?;
+
+
+    if cfg.certificate_path.is_some() && cfg.key_path.is_some() {
+        let c = cfg.clone();
+        let r = router.clone();
+
+        tokio::spawn(async move {
+            let cert_path = c.certificate_path.clone().unwrap();
+            let key_path = c.key_path.clone().unwrap();
+
+            let cert = PathBuf::from(&cert_path);
+            let key = PathBuf::from(&key_path);
+
+            if !cert.exists() {
+                tracing::error!("Certificate path does not exists: {}", cert.display());
+                return;
+            }
+            if !key.exists() {
+                tracing::error!("Key path does not exists: {}", key.display());
+                return;
+            }
+
+            let config = RustlsConfig::from_pem_chain_file(cert, key).await;    
+            if let Err(e) = config {
+                tracing::error!("Bad certificate/key file: {}", e);
+                return;
+            }
+
+            let config = config.unwrap();
+            let addr = SocketAddr::from(([0, 0, 0, 0], c.https_port));
+            
+            tracing::info!("Starting proxy server at https://127.0.0.1:{}", c.https_port);
+            let _ = axum_server::bind_rustls(addr, config)
+                .serve(r.into_make_service())
+                .await;            
+        });
+    }
 
     tokio::spawn(async move {
         tracing::info!("Starting proxy server at http://127.0.0.1:{}", cfg.port);

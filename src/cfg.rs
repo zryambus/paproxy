@@ -6,6 +6,9 @@ use serde_derive::Deserialize;
 #[derive(Debug, Deserialize)]
 pub struct Cfg {
     pub port: u16,
+    pub https_port: u16,
+    pub certificate_path: Option<String>,
+    pub key_path: Option<String>,
     pub sourcedata: String,
     pub help: String,
     pub host: String,

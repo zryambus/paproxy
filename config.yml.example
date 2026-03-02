@@ -1,5 +1,10 @@
 port: 3000
+https_port: 3001
 sourcedata: D:\pa\SourceData\www
 help: D:\pa\SourceData\www\help
 host: 192.168.1.10:5043
 pagrid: false
+# Paths to the certificates may be empty, relative, or absolute.
+# If they are empty, the HTTPS server will not be started.
+certificate_path:
+key_path:

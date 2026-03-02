@@ -1,6 +1,6 @@
 [package]
 name = "paproxy"
-version = "0.4.3"
+version = "0.5.0"
 edition = "2024"
 authors = ["Ilya Volchenkov <lzhepelmen@gmail.com>"]
 repository = "https://github.com/zryambus/paproxy"
@@ -15,7 +15,7 @@ hyper = { version = "=1.8.1", features = ["full"] }
 hyper-util = "=0.1.20"
 tower-http = { version = "=0.6.8", features = ["fs", "cors", "trace"] }
 hyper-rustls = "=0.27.7"
-rustls = { version = "=0.23.36", features = ["tls12"] }
+rustls = { version = "=0.23.37", features = ["tls12"] }
 http-body-util = "=0.1.3"
 bytes = "=1.11.1"
 tokio-tungstenite = { version = "=0.28.0", features = ["__rustls-tls"] }
@@ -40,6 +40,7 @@ cookie = "=0.18.1"
 logroller = { version = "=0.1.10", features = ["tracing"] }
 tracing-appender = "=0.2.4"
 simple-file-rotation = "=0.3.4"
+axum-server = { version = "=0.8.0", features = ["tls-rustls"] }
 
 [[bin]]
 name = "paproxy"

@@ -4,3 +4,4 @@ config.yml
 /build
 /logs
 node_modules
+/certs
