@@ -18,7 +18,7 @@ hyper-rustls = "=0.27.7"
 rustls = { version = "=0.23.37", features = ["tls12"] }
 http-body-util = "=0.1.3"
 bytes = "=1.11.1"
-tokio-tungstenite = { version = "=0.28.0", features = ["__rustls-tls"] }
+tokio-tungstenite = { version = "=0.29.0", features = ["__rustls-tls"] }
 url = "=2.5.8"
 futures-util = "=0.3.32"
 config = { version = "=0.15.19", features = ["yaml"] }
