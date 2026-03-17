@@ -21,7 +21,7 @@ bytes = "=1.11.1"
 tokio-tungstenite = { version = "=0.28.0", features = ["__rustls-tls"] }
 url = "=2.5.8"
 futures-util = "=0.3.32"
-config = { version = "=0.15.19", features = ["yaml"] }
+config = { version = "=0.15.22", features = ["yaml"] }
 serde_derive = "=1.0.228"
 serde = "=1.0.228"
 tracing = "=0.1.44"
