@@ -195,7 +195,7 @@ impl LogFormatter for LogsFormatter {
 
     fn format(&self, width: usize, evt: &tui_logger::ExtLogRecord) -> Vec<Line<'_>> {
         let mut output = String::new();
-        output.push_str(&format!("{} ", evt.timestamp.format("%H:%M:%S%.3f")));
+        output.push_str(&format!("{} ", evt.timestamp.strftime("%H:%M:%S%.3f")));
         output.push_str(&format!("{}: ", evt.level));
 
         let mut sublines: Vec<&str> = evt.msg().lines().rev().collect();
