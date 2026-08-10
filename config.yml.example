@@ -8,3 +8,4 @@ pagrid: false
 # If they are empty, the HTTPS server will not be started.
 certificate_path:
 key_path:
+log_headers: false

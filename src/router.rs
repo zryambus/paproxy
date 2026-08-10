@@ -1,4 +1,4 @@
-use std::{path::PathBuf, sync::{Arc, atomic::AtomicU32}};
+use std::{collections::HashMap, path::PathBuf, sync::{Arc, atomic::AtomicU32}};
 
 use anyhow::Context;
 use axum::{
@@ -76,7 +76,8 @@ async fn handler(
             .uri()
             .path_and_query()
             .map(|v| v.as_str())
-            .unwrap_or(&path);
+            .unwrap_or(&path)
+            .to_owned();
         let method = req.method().clone();
     
         let uri = format!("https://{}{}", cfg.host, path_query);
@@ -87,13 +88,26 @@ async fn handler(
             headers.insert(http::header::HOST, cfg.host.parse()?);
         }
 
-        let content_length = headers.get(header::CONTENT_LENGTH)
-            .and_then(|hv| hv.to_str().ok())
-            .and_then(|str| u64::from_str_radix(str, 10).ok());
-
-        if let Some(content_length) = content_length {
-            state.update_sent(&path, content_length);
-        };
+        let mut headers_map = HashMap::new();
+        for (k, v) in headers {
+            headers_map.insert(k.as_str(), v.to_str().unwrap());
+        }
+        
+        if cfg.log_headers.unwrap_or_default() {
+            tracing::info!(target: "headers", path = path_query, direction = "request", headers = ?headers_map);
+        }
+        
+        let content_length;
+        {
+            let headers = req.headers_mut();
+            content_length = headers.get(header::CONTENT_LENGTH)
+                .and_then(|hv| hv.to_str().ok())
+                .and_then(|str| u64::from_str_radix(str, 10).ok());
+    
+            if let Some(content_length) = content_length {
+                state.update_sent(&path, content_length);
+            };
+        }
         
         let response = client.request(req).await?;
 
@@ -127,6 +141,11 @@ async fn handler(
             }
             frame
         });
+
+        if cfg.log_headers.unwrap_or_default() {
+            tracing::info!(target: "headers", path = path_query, direction = "response", headers = ?parts.headers);
+        }
+
         let mut r = Response::new(inspected_incoming).into_response();
         *r.headers_mut() = parts.headers;
         *r.status_mut() = parts.status;

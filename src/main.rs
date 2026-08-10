@@ -12,7 +12,7 @@ use std::{net::SocketAddr, path::PathBuf, str::FromStr};
 use logroller::LogRollerBuilder;
 use tokio::net::TcpListener;
 use tracing::level_filters::LevelFilter;
-use tracing_subscriber::{prelude::*, registry::Registry};
+use tracing_subscriber::{prelude::*, registry::Registry, filter::filter_fn, layer::SubscriberExt, util::SubscriberInitExt,};
 use clap::Parser;
 use axum_server::tls_rustls::RustlsConfig;
 
@@ -121,9 +121,29 @@ fn main() {
         .with_line_number(false)
         .with_filter(level_filter);
 
+    let headers_appender =  LogRollerBuilder::new("./logs", "headers.json")
+        .rotation(logroller::Rotation::SizeBased(logroller::RotationSize::MB(100)))
+        .max_keep_files(5)
+        .time_zone(logroller::TimeZone::Local)
+        .graceful_shutdown(true)
+        .build()
+        .unwrap();
+
+    let (headers_non_blocking, _headers_guard) = tracing_appender::non_blocking(headers_appender);
+
+    let filter_headers = filter_fn(|metadata| {
+        metadata.target() == "headers"
+    });
+    let headers_layer = tracing_subscriber::fmt::layer()
+        .json()
+        .with_writer(headers_non_blocking)
+        .with_ansi(false)
+        .with_filter(filter_headers);
+
     Registry::default()
         .with(TuiTracingSubscriberLayer)
         .with(fmt)
+        .with(headers_layer)
         .try_init()
         .expect("Could not initialize logging subsystem");
 

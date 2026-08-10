@@ -1,4 +1,4 @@
-FROM rust:1.92.0-alpine3.23 AS rust
+FROM rust:1.97.1-alpine3.24 AS rust
 
 COPY . /home/rust/src
 RUN apk add musl-dev && cd /home/rust/src && \

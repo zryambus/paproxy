@@ -14,6 +14,7 @@ pub struct Cfg {
     pub help: String,
     pub host: String,
     pub pagrid: bool,
+    pub log_headers: Option<bool>,
 }
 
 pub fn get_config(source: Option<PathBuf>) -> anyhow::Result<Arc<Cfg>> {
