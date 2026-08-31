@@ -11,7 +11,7 @@ axum = { version = "=0.8.9", features = ["ws"] }
 axum-extra = { version = "=0.12.6", features = ["cookie"] }
 anyhow = "=1.0.104"
 tokio = { version = "=1.53.1", features = ["full"] }
-hyper = { version = "=1.11.0", features = ["full"] }
+hyper = { version = "=1.11.1", features = ["full"] }
 hyper-util = "=0.1.20"
 tower-http = { version = "=0.7.0", features = ["fs", "cors", "trace"] }
 hyper-rustls = "=0.27.9"
