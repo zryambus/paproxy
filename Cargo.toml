@@ -13,7 +13,7 @@ anyhow = "=1.0.104"
 tokio = { version = "=1.53.1", features = ["full"] }
 hyper = { version = "=1.11.0", features = ["full"] }
 hyper-util = "=0.1.20"
-tower-http = { version = "=0.7.0", features = ["fs", "cors", "trace"] }
+tower-http = { version = "=0.7.1", features = ["fs", "cors", "trace"] }
 hyper-rustls = "=0.27.9"
 rustls = { version = "=0.23.43", features = ["tls12"] }
 http-body-util = "=0.1.4"
