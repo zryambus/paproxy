@@ -14,7 +14,7 @@ use axum::{
 };
 use axum_extra::extract::CookieJar;
 use futures::{SinkExt, StreamExt};
-use http::{Method, header};
+use http::{HeaderMap, HeaderName, Method, header};
 use http_body_util::BodyExt;
 use human_bytes::human_bytes;
 use hyper::{StatusCode, Uri};
@@ -69,6 +69,33 @@ impl Drop for TrafficCounter {
     }
 }
 
+// Headers meaningful only for a single connection, must not be forwarded by proxies (RFC 9110, 7.6.1)
+const HOP_BY_HOP_HEADERS: [HeaderName; 8] = [
+    header::CONNECTION,
+    HeaderName::from_static("keep-alive"),
+    header::PROXY_AUTHENTICATE,
+    header::PROXY_AUTHORIZATION,
+    header::TE,
+    header::TRAILER,
+    header::TRANSFER_ENCODING,
+    header::UPGRADE,
+];
+
+fn remove_hop_by_hop_headers(headers: &mut HeaderMap) {
+    // Headers listed in Connection are hop-by-hop as well
+    let listed: Vec<HeaderName> = headers
+        .get_all(header::CONNECTION)
+        .iter()
+        .filter_map(|value| value.to_str().ok())
+        .flat_map(|value| value.split(','))
+        .filter_map(|name| HeaderName::from_bytes(name.trim().as_bytes()).ok())
+        .collect();
+
+    for name in listed.iter().chain(HOP_BY_HOP_HEADERS.iter()) {
+        headers.remove(name);
+    }
+}
+
 const PA6_SESSION_ID_COOKIE_NAME: &str = "sid";
 const PAG_SESSION_ID_COOKIE_NAME: &str = "SessionID";
 const PA6_NIL_SESSION_ID: &str = "0000000000000000";
@@ -102,6 +129,7 @@ async fn handler(
         if headers.contains_key(http::header::HOST) {
             headers.insert(http::header::HOST, cfg.host.parse()?);
         }
+        remove_hop_by_hop_headers(headers);
 
         if cfg.log_headers {
             let headers_map: HashMap<&str, Cow<str>> = headers
@@ -126,7 +154,8 @@ async fn handler(
 
         let response = client.request(req).await?;
 
-        let (parts, incoming) = response.into_parts();
+        let (mut parts, incoming) = response.into_parts();
+        remove_hop_by_hop_headers(&mut parts.headers);
 
         let session_id = parts
             .headers
@@ -487,6 +516,27 @@ mod tests {
         let status = response.status();
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         (status, String::from_utf8_lossy(&body).into_owned())
+    }
+
+    #[test]
+    fn hop_by_hop_headers_are_removed() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::CONNECTION,
+            "keep-alive, X-Custom-Hop".parse().unwrap(),
+        );
+        headers.insert("keep-alive", "timeout=5".parse().unwrap());
+        headers.insert("x-custom-hop", "1".parse().unwrap());
+        headers.insert(header::TRANSFER_ENCODING, "chunked".parse().unwrap());
+        headers.insert(header::PROXY_AUTHORIZATION, "Basic abc".parse().unwrap());
+        headers.insert(header::COOKIE, "sid=1".parse().unwrap());
+        headers.insert(header::CONTENT_TYPE, "text/html".parse().unwrap());
+
+        remove_hop_by_hop_headers(&mut headers);
+
+        let mut names: Vec<&str> = headers.keys().map(|name| name.as_str()).collect();
+        names.sort();
+        assert_eq!(names, ["content-type", "cookie"]);
     }
 
     #[tokio::test]

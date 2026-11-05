@@ -254,12 +254,41 @@ fn dump_results(results: &DashMap<String, (u64, u64)>) -> anyhow::Result<()> {
         .file_extension("csv")
         .rotate()?;
 
-    let mut file = std::fs::File::create(path)?;
-
-    writeln!(file, "\"path\", \"tx\", \"rx\"")?;
-    for r in results.iter() {
-        let (path, (tx, rx)) = (r.key(), (r.0, r.1));
-        writeln!(file, "\"{}\", {}, {}", path, tx, rx)?;
-    }
+    let file = std::io::BufWriter::new(std::fs::File::create(path)?);
+    write_results(results, file)?;
     Ok(())
+}
+
+fn write_results(
+    results: &DashMap<String, (u64, u64)>,
+    mut out: impl Write,
+) -> std::io::Result<()> {
+    writeln!(out, "path,tx,rx")?;
+    for r in results.iter() {
+        // CSV escapes quotes inside a quoted field by doubling them
+        let path = r.key().replace('"', "\"\"");
+        writeln!(out, "\"{}\",{},{}", path, r.0, r.1)?;
+    }
+    out.flush()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn results_are_written_as_valid_csv() {
+        let results = DashMap::new();
+        results.insert(r#"/api?q="x",y"#.to_owned(), (1, 2));
+
+        let mut out = Vec::new();
+        write_results(&results, &mut out).unwrap();
+
+        assert_eq!(
+            String::from_utf8(out).unwrap(),
+            "path,tx,rx
+\"/api?q=\"\"x\"\",y\",1,2
+"
+        );
+    }
 }

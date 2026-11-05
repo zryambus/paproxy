@@ -92,8 +92,8 @@ impl Tui {
     }
 
     pub fn start(&mut self) {
-        let tick_delay = std::time::Duration::from_secs_f64(1.0 / self.tick_rate);
-        let render_delay = std::time::Duration::from_secs_f64(1.0 / self.frame_rate);
+        let tick_delay = Duration::from_secs_f64(1.0 / self.tick_rate);
+        let render_delay = Duration::from_secs_f64(1.0 / self.frame_rate);
         self.cancel();
         self.cancellation_token = CancellationToken::new();
         let _cancellation_token = self.cancellation_token.clone();
@@ -154,21 +154,10 @@ impl Tui {
         });
     }
 
-    pub fn stop(&self) -> anyhow::Result<()> {
+    pub fn stop(&self) {
+        // The task only forwards terminal events, so it is safe to abort it without waiting
         self.cancel();
-        let mut counter = 0;
-        while !self.task.is_finished() {
-            std::thread::sleep(Duration::from_millis(1));
-            counter += 1;
-            if counter > 50 {
-                self.task.abort();
-            }
-            if counter > 100 {
-                tracing::error!("Failed to abort task in 100 milliseconds for unknown reason");
-                break;
-            }
-        }
-        Ok(())
+        self.task.abort();
     }
 
     pub fn enter(&mut self) -> anyhow::Result<()> {
@@ -185,7 +174,7 @@ impl Tui {
     }
 
     pub fn exit(&mut self) -> anyhow::Result<()> {
-        self.stop()?;
+        self.stop();
         if crossterm::terminal::is_raw_mode_enabled()? {
             self.flush()?;
             if self.paste {
@@ -239,6 +228,8 @@ impl DerefMut for Tui {
 
 impl Drop for Tui {
     fn drop(&mut self) {
-        self.exit().unwrap();
+        if let Err(e) = self.exit() {
+            tracing::error!("Failed to restore terminal: {}", e);
+        }
     }
 }
