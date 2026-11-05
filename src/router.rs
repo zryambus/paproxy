@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf, sync::{Arc, atomic::AtomicU32}};
+use std::{borrow::Cow, collections::HashMap, path::PathBuf, sync::{Arc, atomic::AtomicU64}};
 
 use anyhow::Context;
 use axum::{
@@ -14,29 +14,29 @@ use tokio_tungstenite::{connect_async_tls_with_config, tungstenite::handshake::c
 use tower_http::{services::ServeDir, trace::TraceLayer};
 
 use crate::{
-    cfg::Cfg, state::State, tls::{HTTPSClient, build_client_config, build_https_client}, ws::{axum_to_tungstein, tungstein_to_axum}
+    HEADERS_TARGET, cfg::Cfg, state::State, tls::{HTTPSClient, build_client_config, build_https_client}, ws::{axum_to_tungstein, tungstein_to_axum}
 };
 
 struct TrafficCounter {
-    sent: u32,
-    received: AtomicU32,
+    sent: u64,
+    received: AtomicU64,
     method: Method,
     path: String,
     session_id: String,
 }
 
 impl TrafficCounter {
-    pub fn new(sent: u32, method: Method, path: String, session_id: String) -> Self {
+    pub fn new(sent: u64, method: Method, path: String, session_id: String) -> Self {
         Self {
             sent,
-            received: AtomicU32::new(0),
+            received: AtomicU64::new(0),
             method,
             path,
             session_id
         }
     }
 
-    pub fn update_received(&self, count: u32) {
+    pub fn update_received(&self, count: u64) {
         self.received.fetch_add(count, std::sync::atomic::Ordering::AcqRel);
     }
 }
@@ -48,9 +48,9 @@ impl Drop for TrafficCounter {
             self.session_id,
             self.method,
             self.path,
-            human_bytes(self.sent),
-            human_bytes(self.received.load(std::sync::atomic::Ordering::Relaxed)
-        ));
+            human_bytes(self.sent as f64),
+            human_bytes(self.received.load(std::sync::atomic::Ordering::Relaxed) as f64)
+        );
     }
 }
 
@@ -88,13 +88,12 @@ async fn handler(
             headers.insert(http::header::HOST, cfg.host.parse()?);
         }
 
-        let mut headers_map = HashMap::new();
-        for (k, v) in headers {
-            headers_map.insert(k.as_str(), v.to_str().unwrap());
-        }
-        
         if cfg.log_headers.unwrap_or_default() {
-            tracing::info!(target: "headers", path = path_query, direction = "request", headers = ?headers_map);
+            let headers_map: HashMap<&str, Cow<str>> = headers
+                .iter()
+                .map(|(k, v)| (k.as_str(), String::from_utf8_lossy(v.as_bytes())))
+                .collect();
+            tracing::info!(target: HEADERS_TARGET, path = path_query, direction = "request", headers = ?headers_map);
         }
         
         let content_length;
@@ -127,7 +126,7 @@ async fn handler(
         });
 
         let counter = TrafficCounter::new(
-            content_length.unwrap_or_default() as u32,
+            content_length.unwrap_or_default(),
             method,
             path.clone(),
             session_id.unwrap_or(if cfg.pagrid { PAG_NIL_SESSION_ID.into() } else { PA6_NIL_SESSION_ID.into() })
@@ -137,13 +136,13 @@ async fn handler(
             if let Some(chunk) = frame.data_ref() {
                 let len = chunk.len();
                 state.update_received(&path, len as u64);
-                counter.update_received(len as u32);
+                counter.update_received(len as u64);
             }
             frame
         });
 
         if cfg.log_headers.unwrap_or_default() {
-            tracing::info!(target: "headers", path = path_query, direction = "response", headers = ?parts.headers);
+            tracing::info!(target: HEADERS_TARGET, path = path_query, direction = "response", headers = ?parts.headers);
         }
 
         let mut r = Response::new(inspected_incoming).into_response();
@@ -216,48 +215,50 @@ async fn handle_socket(proxy_socket: WebSocket, cfg: Arc<Cfg>, state: Arc<State>
         let (mut proxy_ws_writer, mut proxy_ws_reader) =
             proxy_socket.split();
 
-        let s = state.clone();
-        tokio::spawn( async move {
+        let upstream_to_client = async {
             while let Some(msg) = pa_ws_reader.next().await {
-                let msg = if let Ok(msg) = msg {
-                    msg
-                } else {
+                let Ok(msg) = msg else {
+                    // upstream disconnected
                     return;
                 };
 
-                s.update_ws_traffic(msg.len() as u64);
+                state.update_ws_traffic(msg.len() as u64);
 
-                let ws_msg = if let Some(msg) = tungstein_to_axum(msg) {
-                    msg 
-                } else {
+                let Some(ws_msg) = tungstein_to_axum(msg) else {
                     continue
                 };
 
                 if let Err(e) = proxy_ws_writer.send(ws_msg).await {
                     tracing::info!("WebSocket error: {}", e);
+                    return;
                 }
             }
-        });
+        };
 
-        while let Some(msg) = proxy_ws_reader.next().await {
-            let msg = if let Ok(msg) = msg {
-                msg
-            } else {
-                // client disconnected
-                return Ok(());
-            };
+        let client_to_upstream = async {
+            while let Some(msg) = proxy_ws_reader.next().await {
+                let Ok(msg) = msg else {
+                    // client disconnected
+                    return Ok(());
+                };
 
-            let msg_size = match msg {
-                axum::extract::ws::Message::Binary(ref bytes) => bytes.len(),
-                axum::extract::ws::Message::Text(ref txt) => txt.as_bytes().len(),
-                _ => 0
-            };
-            state.update_ws_traffic(msg_size as u64);
+                let msg_size = match msg {
+                    axum::extract::ws::Message::Binary(ref bytes) => bytes.len(),
+                    axum::extract::ws::Message::Text(ref txt) => txt.len(),
+                    _ => 0
+                };
+                state.update_ws_traffic(msg_size as u64);
 
-            pa_ws_writer.send(axum_to_tungstein(msg)).await?;
+                pa_ws_writer.send(axum_to_tungstein(msg)).await?;
+            }
+            anyhow::Ok(())
+        };
+
+        // As soon as either side is done, both connections are dropped
+        tokio::select! {
+            _ = upstream_to_client => Ok(()),
+            result = client_to_upstream => result,
         }
-
-        Ok(())
     }
 
 

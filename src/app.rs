@@ -200,7 +200,9 @@ impl LogFormatter for LogsFormatter {
 
         let mut sublines: Vec<&str> = evt.msg().lines().rev().collect();
         let first_line = sublines.pop().unwrap_or_default();
-        output.push_str(&first_line[..std::cmp::min(first_line.len(), width - output.len())]);
+        // Truncate by chars, not bytes: messages may contain non-ASCII text
+        let remaining = width.saturating_sub(output.chars().count());
+        output.extend(first_line.chars().take(remaining));
         [Line::from(output)].into()
     }
 }

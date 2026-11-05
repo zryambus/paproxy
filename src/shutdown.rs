@@ -27,9 +27,11 @@ pub async fn shutdown_signal(state: Arc<State>) {
     tokio::select! {
         _ = terminate() => {},
         _ = tokio::signal::ctrl_c() => {},
-        _ = tui_terminate(state) => {},
+        _ = tui_terminate(state.clone()) => {},
     }
 
+    // Stop the TUI as well when the shutdown was initiated by an OS signal
+    state.shutdown();
     tracing::info!("Signal received, starting graceful shutdown")
 }
 
@@ -37,7 +39,8 @@ pub async fn shutdown_signal(state: Arc<State>) {
 pub async fn shutdown_signal(state: Arc<State>) {
     tokio::select! {
         _ = tokio::signal::ctrl_c() => {},
-        _ = tui_terminate(state) => {},
+        _ = tui_terminate(state.clone()) => {},
     }
+    state.shutdown();
     tracing::info!("Signal received, starting graceful shutdown");
 }

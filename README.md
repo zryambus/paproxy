@@ -99,12 +99,13 @@ to stop the proxy gracefully.
 
 ```powershell
 docker build -t paproxy .
-docker run --rm -p 3000:3000 -v ${PWD}/config.yml:/config.yml paproxy --config /config.yml
+docker run --rm -it -p 3000:3000 -v ${PWD}/config.yml:/config.yml paproxy --config /config.yml
 ```
 
 Mount any directories referenced by `sourcedata`, `help`, `certificate_path`,
 and `key_path` as needed. Use Linux paths in the configuration used inside the
-container.
+container. The `-it` flags are required because PAProxy always runs its terminal
+UI.
 
 ## Русский
 
@@ -203,9 +204,10 @@ log_headers: false
 
 ```powershell
 docker build -t paproxy .
-docker run --rm -p 3000:3000 -v ${PWD}/config.yml:/config.yml paproxy --config /config.yml
+docker run --rm -it -p 3000:3000 -v ${PWD}/config.yml:/config.yml paproxy --config /config.yml
 ```
 
 При необходимости также смонтируйте каталоги из `sourcedata`, `help`,
 `certificate_path` и `key_path`. В конфигурации внутри контейнера используйте
-Linux-пути.
+Linux-пути. Флаги `-it` обязательны, так как PAProxy всегда запускает
+терминальный интерфейс.
