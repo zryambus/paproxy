@@ -226,6 +226,31 @@ async fn handler(
     }
 }
 
+/// Builds the upstream handshake request, forwarding client headers such as cookies
+fn build_upstream_ws_request(
+    uri: String,
+    client_headers: &HeaderMap,
+    host: &str,
+) -> anyhow::Result<http::Request<()>> {
+    let mut request = http::Request::builder().uri(uri).body(())?;
+
+    let headers = request.headers_mut();
+    for (key, value) in client_headers {
+        // tungstenite supports no extensions (e.g. permessage-deflate) and needs its own key
+        if key == header::HOST
+            || key == header::SEC_WEBSOCKET_EXTENSIONS
+            || key == header::SEC_WEBSOCKET_KEY
+        {
+            continue;
+        }
+        headers.append(key, value.clone());
+    }
+    headers.insert(header::HOST, host.parse()?);
+    headers.insert(header::SEC_WEBSOCKET_KEY, generate_key().parse()?);
+
+    Ok(request)
+}
+
 async fn ws(
     Extension(cfg): Extension<Arc<Cfg>>,
     Extension(state): Extension<Arc<State>>,
@@ -274,23 +299,7 @@ async fn handle_socket(
         let uri = format!("wss://{}{}", cfg.host, path_query);
         tracing::info!("{} WS {}", session_id, path_query);
 
-        let mut request = Request::builder().uri(uri);
-
-        let headers = request.headers_mut().context("No headers in request")?;
-        for (key, value) in req.headers() {
-            if key == http::header::HOST {
-                headers.insert(key, cfg.host.parse()?);
-            } else {
-                headers.insert(key, value.to_owned());
-            }
-        }
-
-        request
-            .headers_mut()
-            .unwrap()
-            .insert("Sec-WebSocket-Key", generate_key().parse()?);
-
-        let request = request.body(()).unwrap();
+        let request = build_upstream_ws_request(uri, req.headers(), &cfg.host)?;
 
         let (pa_ws_stream, _) = connect_async_tls_with_config(
             request,
@@ -526,6 +535,40 @@ mod tests {
         let status = response.status();
         let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
         (status, String::from_utf8_lossy(&body).into_owned())
+    }
+
+    #[test]
+    fn upstream_ws_request_forwards_client_headers() {
+        let mut client = HeaderMap::new();
+        client.insert(header::HOST, "proxy:3000".parse().unwrap());
+        client.insert(header::CONNECTION, "Upgrade".parse().unwrap());
+        client.insert(header::UPGRADE, "websocket".parse().unwrap());
+        client.insert(header::SEC_WEBSOCKET_VERSION, "13".parse().unwrap());
+        client.insert(header::SEC_WEBSOCKET_KEY, "client-key".parse().unwrap());
+        client.insert(
+            header::SEC_WEBSOCKET_EXTENSIONS,
+            "permessage-deflate".parse().unwrap(),
+        );
+        client.append(header::COOKIE, "sid=1".parse().unwrap());
+        client.append(header::COOKIE, "lang=ru".parse().unwrap());
+
+        let request =
+            build_upstream_ws_request("wss://pa:5043/ws".into(), &client, "pa:5043").unwrap();
+        let headers = request.headers();
+
+        assert_eq!(request.uri(), "wss://pa:5043/ws");
+        assert_eq!(headers[header::HOST], "pa:5043");
+        assert_eq!(headers[header::CONNECTION], "Upgrade");
+        assert_eq!(headers[header::UPGRADE], "websocket");
+        assert_eq!(headers[header::SEC_WEBSOCKET_VERSION], "13");
+        assert_eq!(headers.get_all(header::SEC_WEBSOCKET_KEY).iter().count(), 1);
+        assert_ne!(headers[header::SEC_WEBSOCKET_KEY], "client-key");
+        assert!(!headers.contains_key(header::SEC_WEBSOCKET_EXTENSIONS));
+        let cookies: Vec<_> = headers.get_all(header::COOKIE).iter().collect();
+        assert_eq!(cookies, ["sid=1", "lang=ru"]);
+
+        // tungstenite must accept the request as a valid handshake
+        tokio_tungstenite::tungstenite::handshake::client::generate_request(request).unwrap();
     }
 
     #[test]
