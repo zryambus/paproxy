@@ -39,6 +39,9 @@ tracing-appender = "=0.2.5"
 simple-file-rotation = "=0.3.4"
 axum-server = { version = "=0.8.0", features = ["tls-rustls"] }
 
+[dev-dependencies]
+tower = { version = "=0.5.3", features = ["util"] }
+
 [[bin]]
 name = "paproxy"
 path = "src/main.rs"

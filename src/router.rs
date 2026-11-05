@@ -423,3 +423,142 @@ fn get_pag_router(
         .layer(Extension(state.clone()))
         .layer(TraceLayer::new_for_http()))
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use axum::body::{Body, to_bytes};
+    use tower::ServiceExt;
+
+    use super::*;
+
+    // Nothing listens on port 1, so every proxied request fails to connect
+    const UNREACHABLE_HOST: &str = "127.0.0.1:1";
+
+    struct TempDir(PathBuf);
+
+    impl TempDir {
+        fn new(name: &str) -> Self {
+            let path =
+                std::env::temp_dir().join(format!("paproxy-{}-{}", name, std::process::id()));
+            std::fs::create_dir_all(&path).unwrap();
+            Self(path)
+        }
+
+        fn file(&self, relative: &str, content: &str) {
+            let path = self.0.join(relative);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, content).unwrap();
+        }
+
+        fn path(&self) -> Option<String> {
+            Some(self.0.to_string_lossy().into_owned())
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            std::fs::remove_dir_all(&self.0).ok();
+        }
+    }
+
+    fn cfg(pagrid: bool, sourcedata: Option<String>, help: Option<String>) -> Arc<Cfg> {
+        Arc::new(Cfg {
+            port: 0,
+            https_port: None,
+            certificate_path: None,
+            key_path: None,
+            sourcedata,
+            help,
+            host: UNREACHABLE_HOST.into(),
+            pagrid,
+            log_headers: false,
+        })
+    }
+
+    fn router(cfg: Arc<Cfg>, transparent: bool) -> Router {
+        get_router(cfg, Arc::new(State::new()), transparent).unwrap()
+    }
+
+    async fn get(router: &Router, uri: &str) -> (StatusCode, String) {
+        let request = Request::builder().uri(uri).body(Body::empty()).unwrap();
+        let response = router.clone().oneshot(request).await.unwrap();
+        let status = response.status();
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        (status, String::from_utf8_lossy(&body).into_owned())
+    }
+
+    #[tokio::test]
+    async fn pa6_serves_local_static_files() {
+        let sourcedata = TempDir::new("pa6-static");
+        sourcedata.file("app.js", "app");
+        let help = TempDir::new("pa6-help");
+        help.file("index.html", "help");
+        let router = router(cfg(false, sourcedata.path(), help.path()), false);
+
+        assert_eq!(
+            get(&router, "/polyanalyst/static/app.js").await,
+            (StatusCode::OK, "app".into())
+        );
+        assert_eq!(
+            get(&router, "/polyanalyst/help/index.html").await,
+            (StatusCode::OK, "help".into())
+        );
+    }
+
+    #[tokio::test]
+    async fn pa6_help_search_is_proxied_not_served_locally() {
+        let sourcedata = TempDir::new("pa6-search-static");
+        let help = TempDir::new("pa6-search-help");
+        help.file("search", "local");
+        let router = router(cfg(false, sourcedata.path(), help.path()), false);
+
+        let (status, _) = get(&router, "/polyanalyst/help/search").await;
+        assert_eq!(status, StatusCode::BAD_GATEWAY);
+    }
+
+    #[tokio::test]
+    async fn pag_serves_local_static_files() {
+        let sourcedata = TempDir::new("pag-static");
+        sourcedata.file("scripts/app.js", "app");
+        let help = TempDir::new("pag-help");
+        help.file("index.html", "help");
+        let router = router(cfg(true, sourcedata.path(), help.path()), false);
+
+        assert_eq!(
+            get(&router, "/scripts/app.js").await,
+            (StatusCode::OK, "app".into())
+        );
+        assert_eq!(
+            get(&router, "/help/index.html").await,
+            (StatusCode::OK, "help".into())
+        );
+    }
+
+    #[tokio::test]
+    async fn static_dirs_are_required_without_transparent_mode() {
+        for pagrid in [false, true] {
+            let result = get_router(cfg(pagrid, None, None), Arc::new(State::new()), false);
+            assert!(result.is_err(), "pagrid: {}", pagrid);
+        }
+    }
+
+    #[tokio::test]
+    async fn transparent_mode_proxies_static_routes() {
+        let router = router(cfg(false, None, None), true);
+
+        let (status, _) = get(&router, "/polyanalyst/static/app.js").await;
+        assert_eq!(status, StatusCode::BAD_GATEWAY);
+    }
+
+    #[tokio::test]
+    async fn unreachable_upstream_returns_bad_gateway() {
+        for pagrid in [false, true] {
+            let router = router(cfg(pagrid, None, None), true);
+
+            let (status, _) = get(&router, "/api").await;
+            assert_eq!(status, StatusCode::BAD_GATEWAY, "pagrid: {}", pagrid);
+        }
+    }
+}
