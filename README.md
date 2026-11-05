@@ -53,6 +53,8 @@ pagrid: false
 certificate_path:
 key_path:
 log_headers: false
+insecure_upstream: true
+upstream_ca_path:
 ```
 
 | Option | Description |
@@ -66,6 +68,8 @@ log_headers: false
 | `certificate_path` | PEM certificate-chain path for the incoming HTTPS server. Leave empty to disable it. |
 | `key_path` | PEM private-key path for the incoming HTTPS server. Leave empty to disable it. |
 | `log_headers` | When `true`, records proxied HTTP request and response headers in `logs/headers.json`. Defaults to `false`. |
+| `insecure_upstream` | When `true` (default), accepts any upstream TLS certificate, including self-signed ones. When `false`, verifies it against system CA certificates and `upstream_ca_path`. |
+| `upstream_ca_path` | PEM file with additional CA certificates trusted for the upstream server. Used only when `insecure_upstream` is `false`. |
 
 `config.yml` is ignored by Git, so credentials and environment-specific paths
 can remain local. You may use another YAML file with `--config`.
@@ -73,6 +77,11 @@ can remain local. You may use another YAML file with `--config`.
 > **Security note:** `log_headers: true` may record cookies, authorization
 > tokens, and other sensitive values. Enable it only for troubleshooting and
 > protect or remove the resulting logs afterwards.
+
+> **Security note:** with the default `insecure_upstream: true` the connection
+> to PolyAnalyst is encrypted but not authenticated, so it can be intercepted on
+> the network. If the upstream certificate is issued by a trusted or internal
+> CA, set `insecure_upstream: false` and, for an internal CA, `upstream_ca_path`.
 
 ### Run
 
@@ -164,6 +173,8 @@ pagrid: false
 certificate_path:
 key_path:
 log_headers: false
+insecure_upstream: true
+upstream_ca_path:
 ```
 
 | Параметр | Описание |
@@ -177,6 +188,8 @@ log_headers: false
 | `certificate_path` | Путь к PEM-цепочке сертификатов для входящего HTTPS. Оставьте пустым, чтобы отключить HTTPS. |
 | `key_path` | Путь к PEM-приватному ключу для входящего HTTPS. Оставьте пустым, чтобы отключить HTTPS. |
 | `log_headers` | При `true` записывает заголовки проксируемых HTTP-запросов и ответов в `logs/headers.json`. По умолчанию `false`. |
+| `insecure_upstream` | При `true` (по умолчанию) принимается любой TLS-сертификат upstream-сервера, в том числе самоподписанный. При `false` сертификат проверяется по системным корневым сертификатам и `upstream_ca_path`. |
+| `upstream_ca_path` | Путь к PEM-файлу с дополнительными корневыми сертификатами для проверки upstream-сервера. Используется, только если `insecure_upstream` равен `false`. |
 
 `config.yml` исключён из Git, поэтому в нём можно хранить локальные пути и
 секреты. Другой YAML-файл можно передать параметром `--config`.
@@ -184,6 +197,12 @@ log_headers: false
 > **Важно:** при `log_headers: true` в журнал могут попасть cookie, токены
 > авторизации и другие конфиденциальные данные. Включайте опцию только для
 > диагностики, а созданные логи защищайте или удаляйте после работы.
+
+> **Важно:** при `insecure_upstream: true` (по умолчанию) соединение с
+> PolyAnalyst шифруется, но подлинность сервера не проверяется, поэтому его
+> можно перехватить в сети. Если сертификат upstream-сервера выпущен доверенным
+> или внутренним центром сертификации, задайте `insecure_upstream: false`, а для
+> внутреннего центра — ещё и `upstream_ca_path`.
 
 ### Запуск
 

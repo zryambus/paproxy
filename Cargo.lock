@@ -1842,6 +1842,7 @@ dependencies = [
  "logroller",
  "ratatui",
  "rustls",
+ "rustls-native-certs",
  "serde",
  "serde_derive",
  "signal-hook 0.4.6",

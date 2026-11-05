@@ -213,7 +213,7 @@ async fn handler(
     match handler_impl(client, cfg, state, req).await {
         Ok(response) => Ok(response.into_response()),
         Err(e) => {
-            tracing::error!("{}", e);
+            tracing::error!("{:#}", e);
             // Failure to reach upstream is not the proxy's own fault
             if e.downcast_ref::<hyper_util::client::legacy::Error>()
                 .is_some()
@@ -229,17 +229,25 @@ async fn handler(
 async fn ws(
     Extension(cfg): Extension<Arc<Cfg>>,
     Extension(state): Extension<Arc<State>>,
+    Extension(tls_config): Extension<Arc<rustls::ClientConfig>>,
     ws: WebSocketUpgrade,
     req: Request,
 ) -> impl IntoResponse {
-    ws.on_upgrade(move |ws| handle_socket(ws, cfg, state, req))
+    ws.on_upgrade(move |ws| handle_socket(ws, cfg, state, tls_config, req))
 }
 
-async fn handle_socket(proxy_socket: WebSocket, cfg: Arc<Cfg>, state: Arc<State>, req: Request) {
+async fn handle_socket(
+    proxy_socket: WebSocket,
+    cfg: Arc<Cfg>,
+    state: Arc<State>,
+    tls_config: Arc<rustls::ClientConfig>,
+    req: Request,
+) {
     async fn handler_impl(
         proxy_socket: WebSocket,
         cfg: Arc<Cfg>,
         state: Arc<State>,
+        tls_config: Arc<rustls::ClientConfig>,
         req: Request,
     ) -> anyhow::Result<()> {
         let path = req.uri().path();
@@ -284,13 +292,11 @@ async fn handle_socket(proxy_socket: WebSocket, cfg: Arc<Cfg>, state: Arc<State>
 
         let request = request.body(()).unwrap();
 
-        let config = Arc::new(build_client_config());
-
         let (pa_ws_stream, _) = connect_async_tls_with_config(
             request,
             None,
             false,
-            Some(tokio_tungstenite::Connector::Rustls(config)),
+            Some(tokio_tungstenite::Connector::Rustls(tls_config)),
         )
         .await?;
 
@@ -344,8 +350,8 @@ async fn handle_socket(proxy_socket: WebSocket, cfg: Arc<Cfg>, state: Arc<State>
         }
     }
 
-    if let Err(e) = handler_impl(proxy_socket, cfg, state, req).await {
-        tracing::error!("{}", e);
+    if let Err(e) = handler_impl(proxy_socket, cfg, state, tls_config, req).await {
+        tracing::error!("{:#}", e);
     };
 }
 
@@ -369,12 +375,14 @@ fn get_static_serve_service(path: &Path, sub_path: Option<&str>) -> ServeDir {
 }
 
 pub fn get_router(cfg: Arc<Cfg>, state: Arc<State>, transparent: bool) -> anyhow::Result<Router> {
-    let client = build_https_client()?;
-    if cfg.pagrid {
-        get_pag_router(cfg, client, state, transparent)
+    let tls_config = build_client_config(&cfg)?;
+    let client = build_https_client(tls_config.clone());
+    let router = if cfg.pagrid {
+        get_pag_router(cfg, client, state, transparent)?
     } else {
-        get_pa6_router(cfg, client, state, transparent)
-    }
+        get_pa6_router(cfg, client, state, transparent)?
+    };
+    Ok(router.layer(Extension(Arc::new(tls_config))))
 }
 
 macro_rules! help_path {
@@ -503,6 +511,8 @@ mod tests {
             host: UNREACHABLE_HOST.into(),
             pagrid,
             log_headers: false,
+            insecure_upstream: true,
+            upstream_ca_path: None,
         })
     }
 

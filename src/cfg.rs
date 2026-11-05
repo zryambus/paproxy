@@ -19,6 +19,15 @@ pub struct Cfg {
     pub pagrid: bool,
     #[serde(default)]
     pub log_headers: bool,
+    /// Accept any upstream TLS certificate, e.g. a self-signed one
+    #[serde(default = "default_true")]
+    pub insecure_upstream: bool,
+    /// PEM file with extra CA certificates trusted for upstream, used only when insecure_upstream is false
+    pub upstream_ca_path: Option<String>,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 pub fn get_config(source: Option<PathBuf>) -> anyhow::Result<Arc<Cfg>> {
@@ -60,6 +69,19 @@ mod tests {
         assert_eq!(cfg.help, None);
         assert!(!cfg.pagrid);
         assert!(!cfg.log_headers);
+        assert!(cfg.insecure_upstream);
+        assert_eq!(cfg.upstream_ca_path, None);
+    }
+
+    #[test]
+    fn upstream_verification_can_be_enabled() {
+        let cfg = parse(
+            "port: 3000\nhost: localhost:5043\ninsecure_upstream: false\nupstream_ca_path: ca.pem",
+        )
+        .unwrap();
+
+        assert!(!cfg.insecure_upstream);
+        assert_eq!(cfg.upstream_ca_path.as_deref(), Some("ca.pem"));
     }
 
     #[test]
@@ -75,6 +97,8 @@ mod tests {
         assert_eq!(cfg.key_path, None);
         assert!(!cfg.pagrid);
         assert!(!cfg.log_headers);
+        assert!(cfg.insecure_upstream);
+        assert_eq!(cfg.upstream_ca_path, None);
     }
 
     #[test]
