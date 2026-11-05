@@ -7,8 +7,6 @@ use tui_logger::{LogFormatter, TuiWidgetState};
 
 use crate::{state::State, tui};
 
-enum Action {}
-
 pub struct App {
     state: Arc<State>,
 
@@ -39,7 +37,7 @@ impl App {
     pub async fn run(&mut self) -> anyhow::Result<()> {
         let mut tui = tui::Tui::new()?
             .tick_rate(4.0) // 4 ticks per second
-            .frame_rate(60.0) // 30 frames per second
+            .frame_rate(10.0) // 10 frames per second
             .mouse(true)
             .paste(false);
 
@@ -51,12 +49,9 @@ impl App {
                 self.ui(frame);
             })?;
 
+            // `tui.next().await` blocks till next event
             if let Some(evt) = tui.next().await {
-                // `tui.next().await` blocks till next event
-                let mut maybe_action = self.handle_event(evt);
-                while let Some(action) = maybe_action {
-                    maybe_action = self.update(action);
-                }
+                self.handle_event(evt);
             };
 
             if self.state.is_shutdown() {
@@ -77,7 +72,7 @@ impl App {
         frame.render_widget(logger_widget, area);
     }
 
-    fn render_table(&mut self, frame: &mut Frame, area: Rect, entries: &Vec<(String, (u64, u64), u64)>) {
+    fn render_table(&mut self, frame: &mut Frame, area: Rect, entries: &[(String, (u64, u64), u64)]) {
         let rows: Vec<Row> = entries.iter()
             .map(|(path, (sent, received), total)| Row::new([
                 Cell::new(path.as_str()),
@@ -93,7 +88,7 @@ impl App {
         frame.render_stateful_widget(table, area, &mut self.table_state);
     }
 
-    fn render_scroll(&mut self, frame: &mut Frame, area: Rect, entries: &Vec<(String, (u64, u64), u64)>) {
+    fn render_scroll(&mut self, frame: &mut Frame, area: Rect, entries: &[(String, (u64, u64), u64)]) {
         let scroll = Scrollbar::new(ratatui::widgets::ScrollbarOrientation::VerticalRight);
         self.scroll_state = self.scroll_state.content_length(entries.len());
         frame.render_stateful_widget(scroll, area.inner(Margin::new(1, 1)), &mut self.scroll_state);
@@ -123,7 +118,7 @@ impl App {
             entries.push((r.key().to_owned(), (r.0, r.1), r.0 + r.1));
         }
         
-        entries.sort_by(|lhs, rhs| rhs.2.cmp(&lhs.2));
+        entries.sort_by_key(|e| std::cmp::Reverse(e.2));
         
         frame.render_widget(Clear, area);
 
@@ -133,11 +128,7 @@ impl App {
         self.render_info(frame, info_area, &state);
     }
 
-    fn update(&self, _action: Action) -> Option<Action> {
-        None
-    }
-
-    fn handle_event(&mut self, event: tui::Event) -> Option<Action> {
+    fn handle_event(&mut self, event: tui::Event) {
         match event {
             tui::Event::Key(key_evt) => {
                 match key_evt.code {
@@ -145,7 +136,7 @@ impl App {
                         self.state.shutdown();
                     },
                     crossterm::event::KeyCode::Char('d') | crossterm::event::KeyCode::Char('в') => {
-                        let state = self.state().clone();
+                        let state = self.state();
                         tokio::task::spawn_blocking(move || {
                             dump_results(state.get_info()).ok();
                         });
@@ -176,7 +167,6 @@ impl App {
             }
             _ => {}
         }
-        None
     }
 }
 

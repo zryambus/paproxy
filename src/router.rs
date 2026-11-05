@@ -5,7 +5,7 @@ use axum::{
     Router, extract::{Extension, Request, WebSocketUpgrade, ws::WebSocket}, response::{IntoResponse, Response}, routing::get
 };
 use axum_extra::extract::CookieJar;
-use futures_util::{SinkExt, StreamExt};
+use futures::{SinkExt, StreamExt};
 use http::{Method, header};
 use http_body_util::BodyExt;
 use human_bytes::human_bytes;
@@ -14,7 +14,7 @@ use tokio_tungstenite::{connect_async_tls_with_config, tungstenite::handshake::c
 use tower_http::{services::ServeDir, trace::TraceLayer};
 
 use crate::{
-    HEADERS_TARGET, cfg::Cfg, state::State, tls::{HTTPSClient, build_client_config, build_https_client}, ws::{axum_to_tungstein, tungstein_to_axum}
+    HEADERS_TARGET, cfg::Cfg, state::State, tls::{HTTPSClient, build_client_config, build_https_client}, ws::{axum_to_tungstenite, tungstenite_to_axum}
 };
 
 struct TrafficCounter {
@@ -54,10 +54,10 @@ impl Drop for TrafficCounter {
     }
 }
 
-const PA6_SESSION_ID_COOKIE_NAME: &'static str = "sid";
-const PAG_SESSION_ID_COOKIE_NAME: &'static str = "SessionID";
-const PA6_NIL_SESSION_ID: &'static str = "0000000000000000";
-const PAG_NIL_SESSION_ID: &'static str = "00000000-0000-0000-0000-000000000000";
+const PA6_SESSION_ID_COOKIE_NAME: &str = "sid";
+const PAG_SESSION_ID_COOKIE_NAME: &str = "SessionID";
+const PA6_NIL_SESSION_ID: &str = "0000000000000000";
+const PAG_NIL_SESSION_ID: &str = "00000000-0000-0000-0000-000000000000";
 
 async fn handler(
     Extension(client): Extension<HTTPSClient>,
@@ -81,7 +81,7 @@ async fn handler(
         let method = req.method().clone();
     
         let uri = format!("https://{}{}", cfg.host, path_query);
-        *req.uri_mut() = Uri::try_from(uri)?.into();
+        *req.uri_mut() = Uri::try_from(uri)?;
 
         let headers = req.headers_mut();
         if headers.contains_key(http::header::HOST) {
@@ -101,7 +101,7 @@ async fn handler(
             let headers = req.headers_mut();
             content_length = headers.get(header::CONTENT_LENGTH)
                 .and_then(|hv| hv.to_str().ok())
-                .and_then(|str| u64::from_str_radix(str, 10).ok());
+                .and_then(|str| str.parse::<u64>().ok());
     
             if let Some(content_length) = content_length {
                 state.update_sent(&path, content_length);
@@ -178,7 +178,7 @@ async fn handle_socket(proxy_socket: WebSocket, cfg: Arc<Cfg>, state: Arc<State>
         let jar = CookieJar::from_headers(req.headers());
         let session_id = jar
             .get(if cfg.pagrid { PAG_SESSION_ID_COOKIE_NAME } else { PA6_SESSION_ID_COOKIE_NAME })
-            .and_then(|c| Some(c.value()))
+            .map(|c| c.value())
             .unwrap_or(if cfg.pagrid { PAG_NIL_SESSION_ID } else { PA6_NIL_SESSION_ID });
 
         let uri = format!("wss://{}{}", cfg.host, path_query);
@@ -224,7 +224,7 @@ async fn handle_socket(proxy_socket: WebSocket, cfg: Arc<Cfg>, state: Arc<State>
 
                 state.update_ws_traffic(msg.len() as u64);
 
-                let Some(ws_msg) = tungstein_to_axum(msg) else {
+                let Some(ws_msg) = tungstenite_to_axum(msg) else {
                     continue
                 };
 
@@ -249,7 +249,7 @@ async fn handle_socket(proxy_socket: WebSocket, cfg: Arc<Cfg>, state: Arc<State>
                 };
                 state.update_ws_traffic(msg_size as u64);
 
-                pa_ws_writer.send(axum_to_tungstein(msg)).await?;
+                pa_ws_writer.send(axum_to_tungstenite(msg)).await?;
             }
             anyhow::Ok(())
         };
@@ -333,21 +333,13 @@ fn get_pag_router(cfg: Arc<Cfg>, client: HTTPSClient, state: Arc<State>, transpa
     ];
 
     let mut router = Router::new()
-        .route("/ws", get(ws))
-        .route("/api", get(handler).post(handler));
+        .route("/ws", get(ws));
 
     if !transparent {
         for (route, sub_path) in static_paths {
             router = router.nest_service(route, get_static_serve_service(&cfg.sourcedata, sub_path));
         }
-    }
-
-    if !transparent {
-        router = router
-            .nest_service(
-                "/help", 
-                get_static_serve_service(&cfg.help, None)
-            );
+        router = router.nest_service("/help", get_static_serve_service(&cfg.help, None));
     }
     
     router

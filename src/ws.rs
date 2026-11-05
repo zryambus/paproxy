@@ -1,7 +1,7 @@
 use tokio_tungstenite::tungstenite::{Message as TungsteniteWsMessage, Utf8Bytes as TungsteniteUtf8Bytes};
 use axum::extract::ws::{Message as AxumWsMessage, Utf8Bytes as AxumUtf8Bytes};
 
-pub fn axum_to_tungstein(msg: AxumWsMessage) -> TungsteniteWsMessage {
+pub fn axum_to_tungstenite(msg: AxumWsMessage) -> TungsteniteWsMessage {
     match msg {
         AxumWsMessage::Text(text) => TungsteniteWsMessage::Text(TungsteniteUtf8Bytes::from(text.as_str())),
         AxumWsMessage::Binary(data) => TungsteniteWsMessage::Binary(data),
@@ -11,7 +11,7 @@ pub fn axum_to_tungstein(msg: AxumWsMessage) -> TungsteniteWsMessage {
     }
 }
 
-pub fn tungstein_to_axum(msg: TungsteniteWsMessage) -> Option<AxumWsMessage> {
+pub fn tungstenite_to_axum(msg: TungsteniteWsMessage) -> Option<AxumWsMessage> {
     match msg {
         TungsteniteWsMessage::Text(text) => AxumWsMessage::Text(AxumUtf8Bytes::from(text.as_str())).into(),
         TungsteniteWsMessage::Binary(data) => AxumWsMessage::Binary(data).into(),
