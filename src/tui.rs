@@ -102,53 +102,37 @@ impl Tui {
             let mut reader = crossterm::event::EventStream::new();
             let mut tick_interval = tokio::time::interval(tick_delay);
             let mut render_interval = tokio::time::interval(render_delay);
-            _event_tx.send(Event::Init).unwrap();
+            // Sending fails only when the receiver is dropped, i.e. the TUI is shutting down
+            if _event_tx.send(Event::Init).is_err() {
+                return;
+            }
             loop {
                 let tick_delay = tick_interval.tick();
                 let render_delay = render_interval.tick();
                 let crossterm_event = reader.next().fuse();
-                tokio::select! {
-                  _ = _cancellation_token.cancelled() => {
-                    break;
-                  }
-                  maybe_event = crossterm_event => {
-                    match maybe_event {
-                      Some(Ok(evt)) => {
-                        match evt {
-                          CrosstermEvent::Key(key) => {
-                            if key.kind == KeyEventKind::Press {
-                              _event_tx.send(Event::Key(key)).unwrap();
-                            }
-                          },
-                          CrosstermEvent::Mouse(mouse) => {
-                            _event_tx.send(Event::Mouse(mouse)).unwrap();
-                          },
-                          CrosstermEvent::Resize(x, y) => {
-                            _event_tx.send(Event::Resize(x, y)).unwrap();
-                          },
-                          CrosstermEvent::FocusLost => {
-                            _event_tx.send(Event::FocusLost).unwrap();
-                          },
-                          CrosstermEvent::FocusGained => {
-                            _event_tx.send(Event::FocusGained).unwrap();
-                          },
-                          CrosstermEvent::Paste(s) => {
-                            _event_tx.send(Event::Paste(s)).unwrap();
-                          },
+                let event = tokio::select! {
+                    _ = _cancellation_token.cancelled() => break,
+                    maybe_event = crossterm_event => match maybe_event {
+                        Some(Ok(CrosstermEvent::Key(key))) if key.kind == KeyEventKind::Press => {
+                            Some(Event::Key(key))
                         }
-                      }
-                      Some(Err(_)) => {
-                        _event_tx.send(Event::Error).unwrap();
-                      }
-                      None => {},
-                    }
-                  },
-                  _ = tick_delay => {
-                      _event_tx.send(Event::Tick).unwrap();
-                  },
-                  _ = render_delay => {
-                      _event_tx.send(Event::Render).unwrap();
-                  },
+                        Some(Ok(CrosstermEvent::Key(_))) => None,
+                        Some(Ok(CrosstermEvent::Mouse(mouse))) => Some(Event::Mouse(mouse)),
+                        Some(Ok(CrosstermEvent::Resize(x, y))) => Some(Event::Resize(x, y)),
+                        Some(Ok(CrosstermEvent::FocusLost)) => Some(Event::FocusLost),
+                        Some(Ok(CrosstermEvent::FocusGained)) => Some(Event::FocusGained),
+                        Some(Ok(CrosstermEvent::Paste(s))) => Some(Event::Paste(s)),
+                        Some(Err(_)) => Some(Event::Error),
+                        None => None,
+                    },
+                    _ = tick_delay => Some(Event::Tick),
+                    _ = render_delay => Some(Event::Render),
+                };
+
+                if let Some(event) = event
+                    && _event_tx.send(event).is_err()
+                {
+                    break;
                 }
             }
         });

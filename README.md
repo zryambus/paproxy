@@ -46,8 +46,8 @@ Copy `config.yml.example` to `config.yml` and update its values:
 ```yaml
 port: 3000
 https_port: 3001
-sourcedata: D:\\pa\\SourceData\\www
-help: D:\\pa\\SourceData\\www\\help
+sourcedata: D:\pa\SourceData\www
+help: D:\pa\SourceData\www\help
 host: 192.168.1.10:5043
 pagrid: false
 certificate_path:
@@ -157,8 +157,8 @@ just release
 ```yaml
 port: 3000
 https_port: 3001
-sourcedata: D:\\pa\\SourceData\\www
-help: D:\\pa\\SourceData\\www\\help
+sourcedata: D:\pa\SourceData\www
+help: D:\pa\SourceData\www\help
 host: 192.168.1.10:5043
 pagrid: false
 certificate_path:
