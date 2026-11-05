@@ -78,18 +78,18 @@ async fn main_impl(cfg: Arc<Cfg>, transparent: bool) -> anyhow::Result<()> {
 
     let https_handle = Handle::new();
     let https_server = if let Some(tls_config) = load_tls_config(&cfg).await? {
-        let addr = SocketAddr::from(([0, 0, 0, 0], cfg.https_port));
+        let https_port = cfg
+            .https_port
+            .context("https_port must be set to enable HTTPS")?;
+        let addr = SocketAddr::from(([0, 0, 0, 0], https_port));
         let listener = std::net::TcpListener::bind(addr)
-            .with_context(|| format!("Failed to bind HTTPS port {}", cfg.https_port))?;
+            .with_context(|| format!("Failed to bind HTTPS port {}", https_port))?;
         listener.set_nonblocking(true)?;
         let server =
             axum_server::from_tcp_rustls(listener, tls_config)?.handle(https_handle.clone());
         let r = router.clone();
 
-        tracing::info!(
-            "Starting proxy server at https://0.0.0.0:{}",
-            cfg.https_port
-        );
+        tracing::info!("Starting proxy server at https://0.0.0.0:{}", https_port);
         Some(tokio::spawn(async move {
             if let Err(e) = server.serve(r.into_make_service()).await {
                 tracing::error!("HTTPS server error: {}", e);
@@ -176,7 +176,7 @@ fn main() -> ExitCode {
         .with_filter(level_filter.and(not_headers()));
 
     let mut _headers_guard = None;
-    let headers_layer = cfg.log_headers.unwrap_or_default().then(|| {
+    let headers_layer = cfg.log_headers.then(|| {
         let headers_appender = LogRollerBuilder::new("./logs", "headers.json")
             .rotation(logroller::Rotation::SizeBased(logroller::RotationSize::MB(
                 100,

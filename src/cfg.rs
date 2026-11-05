@@ -6,14 +6,19 @@ use std::{path::PathBuf, sync::Arc};
 #[derive(Debug, Deserialize)]
 pub struct Cfg {
     pub port: u16,
-    pub https_port: u16,
+    /// Required only when both TLS paths are set
+    pub https_port: Option<u16>,
     pub certificate_path: Option<String>,
     pub key_path: Option<String>,
-    pub sourcedata: String,
-    pub help: String,
+    /// Not used in transparent mode
+    pub sourcedata: Option<String>,
+    /// Not used in transparent mode
+    pub help: Option<String>,
     pub host: String,
+    #[serde(default)]
     pub pagrid: bool,
-    pub log_headers: Option<bool>,
+    #[serde(default)]
+    pub log_headers: bool,
 }
 
 pub fn get_config(source: Option<PathBuf>) -> anyhow::Result<Arc<Cfg>> {

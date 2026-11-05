@@ -58,14 +58,14 @@ log_headers: false
 | Option | Description |
 | --- | --- |
 | `port` | Local HTTP listening port. |
-| `https_port` | Local HTTPS listening port. Used only when both TLS paths are set. |
-| `sourcedata` | Path to local static application files. |
-| `help` | Path to local help files. |
+| `https_port` | Local HTTPS listening port. Required only when both TLS paths are set. |
+| `sourcedata` | Path to local static application files. Not required with `--transparent`. |
+| `help` | Path to local help files. Not required with `--transparent`. |
 | `host` | Upstream PolyAnalyst address in `host:port` form. PAProxy connects to it over HTTPS/WSS. |
-| `pagrid` | Selects PolyAnalyst Grid routes when `true`; selects PolyAnalyst 6 routes when `false`. |
+| `pagrid` | Selects PolyAnalyst Grid routes when `true`; selects PolyAnalyst 6 routes when `false` (default). |
 | `certificate_path` | PEM certificate-chain path for the incoming HTTPS server. Leave empty to disable it. |
 | `key_path` | PEM private-key path for the incoming HTTPS server. Leave empty to disable it. |
-| `log_headers` | When `true`, records proxied HTTP request and response headers in `logs/headers.json`. |
+| `log_headers` | When `true`, records proxied HTTP request and response headers in `logs/headers.json`. Defaults to `false`. |
 
 `config.yml` is ignored by Git, so credentials and environment-specific paths
 can remain local. You may use another YAML file with `--config`.
@@ -163,14 +163,14 @@ log_headers: false
 | Параметр | Описание |
 | --- | --- |
 | `port` | Локальный порт HTTP-сервера. |
-| `https_port` | Локальный порт HTTPS-сервера. Используется, только если заданы оба TLS-пути. |
-| `sourcedata` | Путь к локальным статическим файлам приложения. |
-| `help` | Путь к локальным файлам справки. |
+| `https_port` | Локальный порт HTTPS-сервера. Обязателен, только если заданы оба TLS-пути. |
+| `sourcedata` | Путь к локальным статическим файлам приложения. Не нужен в режиме `--transparent`. |
+| `help` | Путь к локальным файлам справки. Не нужен в режиме `--transparent`. |
 | `host` | Адрес upstream-сервера PolyAnalyst в виде `host:port`. PAProxy подключается к нему по HTTPS/WSS. |
-| `pagrid` | При `true` включаются маршруты PolyAnalyst Grid, при `false` — PolyAnalyst 6. |
+| `pagrid` | При `true` включаются маршруты PolyAnalyst Grid, при `false` (по умолчанию) — PolyAnalyst 6. |
 | `certificate_path` | Путь к PEM-цепочке сертификатов для входящего HTTPS. Оставьте пустым, чтобы отключить HTTPS. |
 | `key_path` | Путь к PEM-приватному ключу для входящего HTTPS. Оставьте пустым, чтобы отключить HTTPS. |
-| `log_headers` | При `true` записывает заголовки проксируемых HTTP-запросов и ответов в `logs/headers.json`. |
+| `log_headers` | При `true` записывает заголовки проксируемых HTTP-запросов и ответов в `logs/headers.json`. По умолчанию `false`. |
 
 `config.yml` исключён из Git, поэтому в нём можно хранить локальные пути и
 секреты. Другой YAML-файл можно передать параметром `--config`.

@@ -1,7 +1,7 @@
 use std::{
     borrow::Cow,
     collections::HashMap,
-    path::PathBuf,
+    path::Path,
     sync::{Arc, atomic::AtomicU64},
 };
 
@@ -103,7 +103,7 @@ async fn handler(
             headers.insert(http::header::HOST, cfg.host.parse()?);
         }
 
-        if cfg.log_headers.unwrap_or_default() {
+        if cfg.log_headers {
             let headers_map: HashMap<&str, Cow<str>> = headers
                 .iter()
                 .map(|(k, v)| (k.as_str(), String::from_utf8_lossy(v.as_bytes())))
@@ -169,7 +169,7 @@ async fn handler(
             frame
         });
 
-        if cfg.log_headers.unwrap_or_default() {
+        if cfg.log_headers {
             tracing::info!(target: HEADERS_TARGET, path = path_query, direction = "response", headers = ?parts.headers);
         }
 
@@ -185,7 +185,14 @@ async fn handler(
         Ok(response) => Ok(response.into_response()),
         Err(e) => {
             tracing::error!("{}", e);
-            Err(StatusCode::INTERNAL_SERVER_ERROR)
+            // Failure to reach upstream is not the proxy's own fault
+            if e.downcast_ref::<hyper_util::client::legacy::Error>()
+                .is_some()
+            {
+                Err(StatusCode::BAD_GATEWAY)
+            } else {
+                Err(StatusCode::INTERNAL_SERVER_ERROR)
+            }
         }
     }
 }
@@ -313,10 +320,21 @@ async fn handle_socket(proxy_socket: WebSocket, cfg: Arc<Cfg>, state: Arc<State>
     };
 }
 
-fn get_static_serve_service(path: &String, sub_path: Option<&str>) -> ServeDir {
+fn get_static_root<'a>(path: &'a Option<String>, name: &str) -> anyhow::Result<&'a Path> {
+    path.as_deref()
+        .map(Path::new)
+        .with_context(|| format!("{} must be set unless --transparent is used", name))
+}
+
+fn get_static_serve_service(path: &Path, sub_path: Option<&str>) -> ServeDir {
     let path = sub_path
-        .map(|sub_path| [path, sub_path].iter().collect::<PathBuf>())
+        .map(|sub_path| path.join(sub_path))
         .unwrap_or(path.into());
+
+    // ServeDir silently responds with 404 for a missing directory
+    if !path.is_dir() {
+        tracing::warn!("Static files directory does not exist: {}", path.display());
+    }
 
     ServeDir::new(path)
 }
@@ -324,9 +342,9 @@ fn get_static_serve_service(path: &String, sub_path: Option<&str>) -> ServeDir {
 pub fn get_router(cfg: Arc<Cfg>, state: Arc<State>, transparent: bool) -> anyhow::Result<Router> {
     let client = build_https_client()?;
     if cfg.pagrid {
-        Ok(get_pag_router(cfg, client, state, transparent))
+        get_pag_router(cfg, client, state, transparent)
     } else {
-        Ok(get_pa6_router(cfg, client, state, transparent))
+        get_pa6_router(cfg, client, state, transparent)
     }
 }
 
@@ -349,28 +367,27 @@ fn get_pa6_router(
     client: HTTPSClient,
     state: Arc<State>,
     transparent: bool,
-) -> Router {
+) -> anyhow::Result<Router> {
     let mut router = Router::new().merge(get_pa6_help_subrouter("/polyanalyst/help"));
 
     if !transparent {
+        let sourcedata = get_static_root(&cfg.sourcedata, "sourcedata")?;
+        let help = get_static_root(&cfg.help, "help")?;
         router = router
             .nest_service(
                 "/polyanalyst/static",
-                get_static_serve_service(&cfg.sourcedata, None),
+                get_static_serve_service(sourcedata, None),
             )
-            .nest_service(
-                "/polyanalyst/help",
-                get_static_serve_service(&cfg.help, None),
-            );
+            .nest_service("/polyanalyst/help", get_static_serve_service(help, None));
     }
 
-    router
+    Ok(router
         .route("/polyanalyst/eventsSocket", get(ws))
         .fallback(handler)
         .layer(Extension(client))
         .layer(Extension(cfg.clone()))
         .layer(Extension(state.clone()))
-        .layer(TraceLayer::new_for_http())
+        .layer(TraceLayer::new_for_http()))
 }
 
 fn get_pag_router(
@@ -378,7 +395,7 @@ fn get_pag_router(
     client: HTTPSClient,
     state: Arc<State>,
     transparent: bool,
-) -> Router {
+) -> anyhow::Result<Router> {
     let static_paths: Vec<(&str, Option<&str>)> = vec![
         ("/fonts", Some("fonts")),
         ("/vendor", Some("vendor")),
@@ -391,17 +408,18 @@ fn get_pag_router(
     let mut router = Router::new().route("/ws", get(ws));
 
     if !transparent {
+        let sourcedata = get_static_root(&cfg.sourcedata, "sourcedata")?;
+        let help = get_static_root(&cfg.help, "help")?;
         for (route, sub_path) in static_paths {
-            router =
-                router.nest_service(route, get_static_serve_service(&cfg.sourcedata, sub_path));
+            router = router.nest_service(route, get_static_serve_service(sourcedata, sub_path));
         }
-        router = router.nest_service("/help", get_static_serve_service(&cfg.help, None));
+        router = router.nest_service("/help", get_static_serve_service(help, None));
     }
 
-    router
+    Ok(router
         .fallback(handler)
         .layer(Extension(client))
         .layer(Extension(cfg.clone()))
         .layer(Extension(state.clone()))
-        .layer(TraceLayer::new_for_http())
+        .layer(TraceLayer::new_for_http()))
 }
