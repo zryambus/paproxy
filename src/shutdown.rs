@@ -1,7 +1,7 @@
 use crate::state::State;
 use std::sync::Arc;
 
-async fn tui_terminate(state: Arc<State>) {
+pub async fn wait_for_shutdown(state: Arc<State>) {
     loop {
         use std::time::Duration;
 
@@ -27,7 +27,7 @@ pub async fn shutdown_signal(state: Arc<State>) {
     tokio::select! {
         _ = terminate() => {},
         _ = tokio::signal::ctrl_c() => {},
-        _ = tui_terminate(state.clone()) => {},
+        _ = wait_for_shutdown(state.clone()) => {},
     }
 
     // Stop the TUI as well when the shutdown was initiated by an OS signal
@@ -39,7 +39,7 @@ pub async fn shutdown_signal(state: Arc<State>) {
 pub async fn shutdown_signal(state: Arc<State>) {
     tokio::select! {
         _ = tokio::signal::ctrl_c() => {},
-        _ = tui_terminate(state.clone()) => {},
+        _ = wait_for_shutdown(state.clone()) => {},
     }
     state.shutdown();
     tracing::info!("Signal received, starting graceful shutdown");

@@ -8,7 +8,8 @@ mod tui;
 mod ws;
 
 use std::{
-    net::SocketAddr, path::PathBuf, process::ExitCode, str::FromStr, sync::Arc, time::Duration,
+    io::IsTerminal, net::SocketAddr, path::PathBuf, process::ExitCode, str::FromStr, sync::Arc,
+    time::Duration,
 };
 
 use anyhow::Context;
@@ -26,22 +27,31 @@ use tracing_subscriber::{
 
 use cfg::{Cfg, get_config};
 use router::get_router;
-use shutdown::shutdown_signal;
+use shutdown::{shutdown_signal, wait_for_shutdown};
 use tui_logger::TuiTracingSubscriberLayer;
 
-use crate::app::App;
+use crate::{
+    app::{App, dump_results},
+    state::State,
+};
 
 const HEADERS_TARGET: &str = "headers";
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Parser)]
 struct Args {
+    /// Path to a YAML configuration file [default: ./config.yml]
     #[arg(long)]
     config: Option<std::path::PathBuf>,
+    /// Log level: error, warn, info, debug or trace [default: info]
     #[arg(long)]
     loglevel: Option<String>,
+    /// Proxy static routes instead of serving local static files
     #[arg(short, long)]
     transparent: bool,
+    /// Run without the terminal UI and write logs to stdout
+    #[arg(long)]
+    headless: bool,
 }
 
 async fn load_tls_config(cfg: &Cfg) -> anyhow::Result<Option<RustlsConfig>> {
@@ -64,11 +74,10 @@ async fn load_tls_config(cfg: &Cfg) -> anyhow::Result<Option<RustlsConfig>> {
     Ok(Some(config))
 }
 
-async fn main_impl(cfg: Arc<Cfg>, transparent: bool) -> anyhow::Result<()> {
+async fn main_impl(cfg: Arc<Cfg>, transparent: bool, headless: bool) -> anyhow::Result<()> {
     tracing::info!("Logging subsystem initialized correctly");
 
-    let mut app = App::new();
-    let state = app.state();
+    let state = Arc::new(State::new());
     let router = get_router(cfg.clone(), state.clone(), transparent)?;
 
     let addr = SocketAddr::from(([0, 0, 0, 0], cfg.port));
@@ -100,17 +109,25 @@ async fn main_impl(cfg: Arc<Cfg>, transparent: bool) -> anyhow::Result<()> {
     };
 
     tracing::info!("Starting proxy server at http://0.0.0.0:{}", cfg.port);
+    let shutdown = shutdown_signal(state.clone());
     let http_server = tokio::spawn(async move {
         if let Err(e) = axum::serve(listener, router.into_make_service())
-            .with_graceful_shutdown(shutdown_signal(state))
+            .with_graceful_shutdown(shutdown)
             .await
         {
             tracing::error!("HTTP server error: {}", e);
         }
     });
 
-    app.run().await?;
+    let ui_result = if headless {
+        wait_for_shutdown(state.clone()).await;
+        Ok(())
+    } else {
+        App::new(state.clone()).run().await
+    };
 
+    // Stop the servers even if the TUI failed
+    state.shutdown();
     // HTTP server observes the shutdown flag by itself, HTTPS server has to be told explicitly
     https_handle.graceful_shutdown(Some(SHUTDOWN_TIMEOUT));
     let servers = async {
@@ -129,7 +146,11 @@ async fn main_impl(cfg: Arc<Cfg>, transparent: bool) -> anyhow::Result<()> {
         );
     }
 
-    Ok(())
+    if let Err(e) = dump_results(state.get_info()) {
+        tracing::error!("Failed to write results: {}", e);
+    }
+
+    ui_result
 }
 
 fn main() -> ExitCode {
@@ -142,6 +163,14 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+
+    // The TUI draws to stderr
+    if !args.headless && !std::io::stderr().is_terminal() {
+        eprintln!(
+            "Exiting with error: no terminal available, use --headless to run without the TUI"
+        );
+        return ExitCode::FAILURE;
+    }
 
     let filter: tui_logger::LevelFilter = args
         .loglevel
@@ -197,18 +226,31 @@ fn main() -> ExitCode {
             .with_filter(filter_fn(|metadata| metadata.target() == HEADERS_TARGET))
     });
 
+    let tui_layer = (!args.headless).then(|| TuiTracingSubscriberLayer.with_filter(not_headers()));
+
+    let console_layer = args.headless.then(|| {
+        tracing_subscriber::fmt::layer()
+            .with_writer(std::io::stdout)
+            .with_ansi(std::io::stdout().is_terminal())
+            .with_target(false)
+            .with_filter(level_filter.and(not_headers()))
+    });
+
     Registry::default()
-        .with(TuiTracingSubscriberLayer.with_filter(not_headers()))
+        .with(tui_layer)
+        .with(console_layer)
         .with(fmt)
         .with(headers_layer)
         .try_init()
         .expect("Could not initialize logging subsystem");
 
-    tui_logger::init_logger(filter).expect("Failed to initialize logger");
-    tui_logger::set_default_level(filter);
+    if !args.headless {
+        tui_logger::init_logger(filter).expect("Failed to initialize logger");
+        tui_logger::set_default_level(filter);
+    }
 
     let rt = tokio::runtime::Runtime::new().expect("Could not initialize Tokio runtime");
-    if let Err(e) = rt.block_on(main_impl(cfg, args.transparent)) {
+    if let Err(e) = rt.block_on(main_impl(cfg, args.transparent, args.headless)) {
         tracing::error!("Exiting with error: {}", e);
         eprintln!("Exiting with error: {:?}", e);
         return ExitCode::FAILURE;

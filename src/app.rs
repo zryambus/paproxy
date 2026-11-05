@@ -23,11 +23,11 @@ pub struct App {
 }
 
 impl App {
-    pub fn new() -> Self {
+    pub fn new(state: Arc<State>) -> Self {
         let logs_state = TuiWidgetState::default();
 
         Self {
-            state: Arc::new(State::new()),
+            state,
             scroll_state: ScrollbarState::new(0),
             table_state: TableState::new(),
             logs_state,
@@ -218,12 +218,6 @@ impl App {
     }
 }
 
-impl Drop for App {
-    fn drop(&mut self) {
-        dump_results(self.state.get_info()).ok();
-    }
-}
-
 struct LogsFormatter {}
 
 impl LogFormatter for LogsFormatter {
@@ -247,7 +241,7 @@ impl LogFormatter for LogsFormatter {
 
 use std::io::Write;
 
-fn dump_results(results: &DashMap<String, (u64, u64)>) -> anyhow::Result<()> {
+pub fn dump_results(results: &DashMap<String, (u64, u64)>) -> anyhow::Result<()> {
     let path = "logs/results.csv";
     simple_file_rotation::FileRotation::new(path)
         .max_old_files(5)

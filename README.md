@@ -89,23 +89,29 @@ Available options:
 ```text
 --config <PATH>     Path to a YAML configuration file
 --loglevel <LEVEL>  Log level, for example: error, warn, info, debug, trace
---transparent       Proxy static routes instead of serving local static files
+-t, --transparent   Proxy static routes instead of serving local static files
+--headless          Run without the terminal UI and write logs to stdout
 ```
 
-Application logs are stored under `logs/` and rotated by size. Press `Ctrl+C`
-to stop the proxy gracefully.
+Application logs are stored under `logs/` and rotated by size. Traffic
+statistics are written to `logs/results.csv` on exit. Press `Ctrl+C` to stop
+the proxy gracefully.
+
+Use `--headless` when no terminal is available, for example in Docker or when
+running PAProxy as a service. Without it PAProxy refuses to start outside a
+terminal.
 
 ### Docker
 
 ```powershell
 docker build -t paproxy .
-docker run --rm -it -p 3000:3000 -v ${PWD}/config.yml:/config.yml paproxy --config /config.yml
+docker run --rm -p 3000:3000 -v ${PWD}/config.yml:/config.yml paproxy --headless --config /config.yml
 ```
 
 Mount any directories referenced by `sourcedata`, `help`, `certificate_path`,
 and `key_path` as needed. Use Linux paths in the configuration used inside the
-container. The `-it` flags are required because PAProxy always runs its terminal
-UI.
+container. To use the terminal UI instead, replace `--headless` with the `-it`
+flags of `docker run`.
 
 ## Русский
 
@@ -194,20 +200,25 @@ log_headers: false
 ```text
 --config <PATH>     Путь к YAML-файлу конфигурации
 --loglevel <LEVEL>  Уровень логирования: error, warn, info, debug или trace
---transparent       Проксировать статические маршруты вместо локальной раздачи файлов
+-t, --transparent   Проксировать статические маршруты вместо локальной раздачи файлов
+--headless          Работать без терминального интерфейса, журнал выводить в stdout
 ```
 
-Журналы приложения хранятся в `logs/` и ротируются по размеру. Для корректной
-остановки прокси нажмите `Ctrl+C`.
+Журналы приложения хранятся в `logs/` и ротируются по размеру. Статистика
+трафика при выходе записывается в `logs/results.csv`. Для корректной остановки
+прокси нажмите `Ctrl+C`.
+
+Используйте `--headless`, если терминала нет, например в Docker или при запуске
+PAProxy как службы. Без этого флага вне терминала PAProxy не запустится.
 
 ### Docker
 
 ```powershell
 docker build -t paproxy .
-docker run --rm -it -p 3000:3000 -v ${PWD}/config.yml:/config.yml paproxy --config /config.yml
+docker run --rm -p 3000:3000 -v ${PWD}/config.yml:/config.yml paproxy --headless --config /config.yml
 ```
 
 При необходимости также смонтируйте каталоги из `sourcedata`, `help`,
 `certificate_path` и `key_path`. В конфигурации внутри контейнера используйте
-Linux-пути. Флаги `-it` обязательны, так как PAProxy всегда запускает
-терминальный интерфейс.
+Linux-пути. Чтобы работать с терминальным интерфейсом, замените `--headless` на
+флаги `-it` команды `docker run`.
