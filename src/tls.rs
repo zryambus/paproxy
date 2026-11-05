@@ -1,17 +1,16 @@
 use std::sync::Arc;
 
 use hyper_util::{
-    client::legacy::{connect::HttpConnector, Client},
+    client::legacy::{Client, connect::HttpConnector},
     rt::TokioExecutor,
 };
 use rustls::{
+    DigitallySignedStruct,
     client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
     pki_types::{CertificateDer, ServerName, UnixTime},
-    DigitallySignedStruct,
 };
 
-pub type HTTPSClient =
-    Client<hyper_rustls::HttpsConnector<HttpConnector>, axum::body::Body>;
+pub type HTTPSClient = Client<hyper_rustls::HttpsConnector<HttpConnector>, axum::body::Body>;
 
 #[derive(Debug)]
 struct DummyVerifier {}

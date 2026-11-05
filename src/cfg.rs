@@ -1,8 +1,7 @@
-
-use std::{sync::Arc, path::PathBuf};
 use anyhow::Context;
-use config::{Config, FileFormat, File};
+use config::{Config, File, FileFormat};
 use serde_derive::Deserialize;
+use std::{path::PathBuf, sync::Arc};
 
 #[derive(Debug, Deserialize)]
 pub struct Cfg {

@@ -2,7 +2,12 @@ use std::sync::Arc;
 
 use crossterm::event::KeyModifiers;
 use dashmap::DashMap;
-use ratatui::{Frame, layout::{Constraint, Layout, Margin, Rect}, text::Line, widgets::{Block, Cell, Clear, Row, Scrollbar, ScrollbarState, Table, TableState}};
+use ratatui::{
+    Frame,
+    layout::{Constraint, Layout, Margin, Rect},
+    text::Line,
+    widgets::{Block, Cell, Clear, Row, Scrollbar, ScrollbarState, Table, TableState},
+};
 use tui_logger::{LogFormatter, TuiWidgetState};
 
 use crate::{state::State, tui};
@@ -26,7 +31,7 @@ impl App {
             scroll_state: ScrollbarState::new(0),
             table_state: TableState::new(),
             logs_state,
-            logs_height: 0
+            logs_height: 0,
         }
     }
 
@@ -67,31 +72,65 @@ impl App {
     fn render_logs(&mut self, frame: &mut Frame, area: Rect) {
         let logger_widget = tui_logger::TuiLoggerWidget::default()
             .block(Block::bordered().title(Line::from("Log").centered()))
-            .opt_formatter(Some(Box::new(LogsFormatter{})))
+            .opt_formatter(Some(Box::new(LogsFormatter {})))
             .state(&self.logs_state);
         frame.render_widget(logger_widget, area);
     }
 
-    fn render_table(&mut self, frame: &mut Frame, area: Rect, entries: &[(String, (u64, u64), u64)]) {
-        let rows: Vec<Row> = entries.iter()
-            .map(|(path, (sent, received), total)| Row::new([
-                Cell::new(path.as_str()),
-                Cell::from(human_bytes::human_bytes(*sent as f64)),
-                Cell::from(human_bytes::human_bytes(*received as f64)),
-                Cell::from(human_bytes::human_bytes(*total as f64)),
-            ]).height(1))
+    fn render_table(
+        &mut self,
+        frame: &mut Frame,
+        area: Rect,
+        entries: &[(String, (u64, u64), u64)],
+    ) {
+        let rows: Vec<Row> = entries
+            .iter()
+            .map(|(path, (sent, received), total)| {
+                Row::new([
+                    Cell::new(path.as_str()),
+                    Cell::from(human_bytes::human_bytes(*sent as f64)),
+                    Cell::from(human_bytes::human_bytes(*received as f64)),
+                    Cell::from(human_bytes::human_bytes(*total as f64)),
+                ])
+                .height(1)
+            })
             .collect();
-        let table = Table::new(rows, [Constraint::Fill(1), Constraint::Length(9), Constraint::Length(9), Constraint::Length(10)])
-            .header(Row::new([Cell::new("Handler"), Cell::new("Tx"), Cell::new("Rx"), Cell::new("Sum")]).height(1))
-            .block(Block::bordered());
+        let table = Table::new(
+            rows,
+            [
+                Constraint::Fill(1),
+                Constraint::Length(9),
+                Constraint::Length(9),
+                Constraint::Length(10),
+            ],
+        )
+        .header(
+            Row::new([
+                Cell::new("Handler"),
+                Cell::new("Tx"),
+                Cell::new("Rx"),
+                Cell::new("Sum"),
+            ])
+            .height(1),
+        )
+        .block(Block::bordered());
 
         frame.render_stateful_widget(table, area, &mut self.table_state);
     }
 
-    fn render_scroll(&mut self, frame: &mut Frame, area: Rect, entries: &[(String, (u64, u64), u64)]) {
+    fn render_scroll(
+        &mut self,
+        frame: &mut Frame,
+        area: Rect,
+        entries: &[(String, (u64, u64), u64)],
+    ) {
         let scroll = Scrollbar::new(ratatui::widgets::ScrollbarOrientation::VerticalRight);
         self.scroll_state = self.scroll_state.content_length(entries.len());
-        frame.render_stateful_widget(scroll, area.inner(Margin::new(1, 1)), &mut self.scroll_state);
+        frame.render_stateful_widget(
+            scroll,
+            area.inner(Margin::new(1, 1)),
+            &mut self.scroll_state,
+        );
     }
 
     fn render_info(&mut self, frame: &mut Frame, area: Rect, state: &Arc<State>) {
@@ -99,7 +138,8 @@ impl App {
             "HTTP traffic {} WebSocket traffic {}",
             human_bytes::human_bytes(state.total_traffic() as f64),
             human_bytes::human_bytes(state.websocket_traffic() as f64)
-        )).centered();
+        ))
+        .centered();
         frame.render_widget(line, area);
     }
 
@@ -107,19 +147,23 @@ impl App {
         let state = self.state();
 
         let area = frame.area();
-        
-        let layout = Layout::vertical([Constraint::Fill(1), Constraint::Fill(1), Constraint::Length(1)]);
+
+        let layout = Layout::vertical([
+            Constraint::Fill(1),
+            Constraint::Fill(1),
+            Constraint::Length(1),
+        ]);
         let [logs_area, table_area, info_area] = layout.areas(area);
-        
+
         self.logs_height = logs_area.height;
-        
+
         let mut entries: Vec<(String, (u64, u64), u64)> = vec![];
         for r in state.get_info().iter() {
             entries.push((r.key().to_owned(), (r.0, r.1), r.0 + r.1));
         }
-        
+
         entries.sort_by_key(|e| std::cmp::Reverse(e.2));
-        
+
         frame.render_widget(Clear, area);
 
         self.render_logs(frame, logs_area);
@@ -130,41 +174,45 @@ impl App {
 
     fn handle_event(&mut self, event: tui::Event) {
         match event {
-            tui::Event::Key(key_evt) => {
-                match key_evt.code {
-                    crossterm::event::KeyCode::Char('c') | crossterm::event::KeyCode::Char('с') if key_evt.modifiers.contains(KeyModifiers::CONTROL) => {
-                        self.state.shutdown();
-                    },
-                    crossterm::event::KeyCode::Char('d') | crossterm::event::KeyCode::Char('в') => {
-                        let state = self.state();
-                        tokio::task::spawn_blocking(move || {
-                            dump_results(state.get_info()).ok();
-                        });
-                    }
-                    _ => {}
+            tui::Event::Key(key_evt) => match key_evt.code {
+                crossterm::event::KeyCode::Char('c') | crossterm::event::KeyCode::Char('с')
+                    if key_evt.modifiers.contains(KeyModifiers::CONTROL) =>
+                {
+                    self.state.shutdown();
                 }
+                crossterm::event::KeyCode::Char('d') | crossterm::event::KeyCode::Char('в') => {
+                    let state = self.state();
+                    tokio::task::spawn_blocking(move || {
+                        dump_results(state.get_info()).ok();
+                    });
+                }
+                _ => {}
             },
-            tui::Event::Mouse(mouse_evt) => {
-                match mouse_evt.kind {
-                    crossterm::event::MouseEventKind::ScrollDown => {
-                        if mouse_evt.row <= self.logs_height {
-                            self.logs_state.transition(tui_logger::TuiWidgetEvent::NextPageKey);
-                        } else {
-                            self.scroll_state.next();
-                            self.table_state = self.table_state.with_offset(self.scroll_state.get_position());
-                        };
-                    },
-                    crossterm::event::MouseEventKind::ScrollUp => {
-                        if mouse_evt.row <= self.logs_height {
-                            self.logs_state.transition(tui_logger::TuiWidgetEvent::PrevPageKey);
-                        } else {
-                            self.scroll_state.prev();
-                            self.table_state = self.table_state.with_offset(self.scroll_state.get_position());
-                        };
-                    },
-                    _ => {}
+            tui::Event::Mouse(mouse_evt) => match mouse_evt.kind {
+                crossterm::event::MouseEventKind::ScrollDown => {
+                    if mouse_evt.row <= self.logs_height {
+                        self.logs_state
+                            .transition(tui_logger::TuiWidgetEvent::NextPageKey);
+                    } else {
+                        self.scroll_state.next();
+                        self.table_state = self
+                            .table_state
+                            .with_offset(self.scroll_state.get_position());
+                    };
                 }
-            }
+                crossterm::event::MouseEventKind::ScrollUp => {
+                    if mouse_evt.row <= self.logs_height {
+                        self.logs_state
+                            .transition(tui_logger::TuiWidgetEvent::PrevPageKey);
+                    } else {
+                        self.scroll_state.prev();
+                        self.table_state = self
+                            .table_state
+                            .with_offset(self.scroll_state.get_position());
+                    };
+                }
+                _ => {}
+            },
             _ => {}
         }
     }

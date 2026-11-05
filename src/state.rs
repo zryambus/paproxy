@@ -1,4 +1,4 @@
-use std::sync::{atomic::{AtomicBool, AtomicU64}};
+use std::sync::atomic::{AtomicBool, AtomicU64};
 
 use dashmap::DashMap;
 
@@ -22,13 +22,15 @@ impl State {
     pub fn update_sent(&self, url: &str, count: u64) {
         let mut entry = self.url_traffic.entry(url.to_string()).or_insert((0, 0));
         entry.0 += count;
-        self.http_traffic.fetch_add(count, std::sync::atomic::Ordering::AcqRel);
+        self.http_traffic
+            .fetch_add(count, std::sync::atomic::Ordering::AcqRel);
     }
 
     pub fn update_received(&self, url: &str, count: u64) {
         let mut entry = self.url_traffic.entry(url.to_string()).or_insert((0, 0));
         entry.1 += count;
-        self.http_traffic.fetch_add(count, std::sync::atomic::Ordering::AcqRel);
+        self.http_traffic
+            .fetch_add(count, std::sync::atomic::Ordering::AcqRel);
     }
 
     pub fn get_info(&self) -> &DashMap<String, (u64, u64)> {
@@ -36,7 +38,8 @@ impl State {
     }
 
     pub fn shutdown(&self) {
-        self.shutdown.store(true, std::sync::atomic::Ordering::Relaxed);
+        self.shutdown
+            .store(true, std::sync::atomic::Ordering::Relaxed);
     }
 
     pub fn is_shutdown(&self) -> bool {
@@ -48,7 +51,8 @@ impl State {
     }
 
     pub fn update_ws_traffic(&self, count: u64) {
-        self.ws_traffic.fetch_add(count, std::sync::atomic::Ordering::AcqRel);
+        self.ws_traffic
+            .fetch_add(count, std::sync::atomic::Ordering::AcqRel);
     }
 
     pub fn websocket_traffic(&self) -> u64 {

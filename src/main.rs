@@ -1,24 +1,31 @@
+mod app;
 mod cfg;
-mod ws;
-mod tls;
 mod router;
 mod shutdown;
 mod state;
+mod tls;
 mod tui;
-mod app;
+mod ws;
 
-use std::{net::SocketAddr, path::PathBuf, process::ExitCode, str::FromStr, sync::Arc, time::Duration};
+use std::{
+    net::SocketAddr, path::PathBuf, process::ExitCode, str::FromStr, sync::Arc, time::Duration,
+};
 
 use anyhow::Context;
+use axum_server::{Handle, tls_rustls::RustlsConfig};
+use clap::Parser;
 use logroller::LogRollerBuilder;
 use tokio::net::TcpListener;
 use tracing::level_filters::LevelFilter;
-use tracing_subscriber::{prelude::*, registry::Registry, filter::{filter_fn, FilterExt}, util::SubscriberInitExt,};
-use clap::Parser;
-use axum_server::{Handle, tls_rustls::RustlsConfig};
+use tracing_subscriber::{
+    filter::{FilterExt, filter_fn},
+    prelude::*,
+    registry::Registry,
+    util::SubscriberInitExt,
+};
 
-use router::get_router;
 use cfg::{Cfg, get_config};
+use router::get_router;
 use shutdown::shutdown_signal;
 use tui_logger::TuiTracingSubscriberLayer;
 
@@ -34,7 +41,7 @@ struct Args {
     #[arg(long)]
     loglevel: Option<String>,
     #[arg(short, long)]
-    transparent: bool
+    transparent: bool,
 }
 
 async fn load_tls_config(cfg: &Cfg) -> anyhow::Result<Option<RustlsConfig>> {
@@ -75,11 +82,14 @@ async fn main_impl(cfg: Arc<Cfg>, transparent: bool) -> anyhow::Result<()> {
         let listener = std::net::TcpListener::bind(addr)
             .with_context(|| format!("Failed to bind HTTPS port {}", cfg.https_port))?;
         listener.set_nonblocking(true)?;
-        let server = axum_server::from_tcp_rustls(listener, tls_config)?
-            .handle(https_handle.clone());
+        let server =
+            axum_server::from_tcp_rustls(listener, tls_config)?.handle(https_handle.clone());
         let r = router.clone();
 
-        tracing::info!("Starting proxy server at https://0.0.0.0:{}", cfg.https_port);
+        tracing::info!(
+            "Starting proxy server at https://0.0.0.0:{}",
+            cfg.https_port
+        );
         Some(tokio::spawn(async move {
             if let Err(e) = server.serve(r.into_make_service()).await {
                 tracing::error!("HTTPS server error: {}", e);
@@ -109,8 +119,14 @@ async fn main_impl(cfg: Arc<Cfg>, transparent: bool) -> anyhow::Result<()> {
             https_server.await.ok();
         }
     };
-    if tokio::time::timeout(SHUTDOWN_TIMEOUT, servers).await.is_err() {
-        tracing::warn!("Servers did not stop in {:?}, terminating", SHUTDOWN_TIMEOUT);
+    if tokio::time::timeout(SHUTDOWN_TIMEOUT, servers)
+        .await
+        .is_err()
+    {
+        tracing::warn!(
+            "Servers did not stop in {:?}, terminating",
+            SHUTDOWN_TIMEOUT
+        );
     }
 
     Ok(())
@@ -127,13 +143,16 @@ fn main() -> ExitCode {
         }
     };
 
-    let filter: tui_logger::LevelFilter = args.loglevel
+    let filter: tui_logger::LevelFilter = args
+        .loglevel
         .clone()
         .and_then(|loglevel| tui_logger::LevelFilter::from_str(&loglevel).ok())
         .unwrap_or(tui_logger::LevelFilter::Info);
 
     let appender = LogRollerBuilder::new("./logs", "paproxy.log")
-        .rotation(logroller::Rotation::SizeBased(logroller::RotationSize::MB(100)))
+        .rotation(logroller::Rotation::SizeBased(logroller::RotationSize::MB(
+            100,
+        )))
         .max_keep_files(5)
         .time_zone(logroller::TimeZone::Local)
         .graceful_shutdown(true)
@@ -142,7 +161,8 @@ fn main() -> ExitCode {
 
     let (non_blocking, _guard) = tracing_appender::non_blocking(appender);
 
-    let level_filter = LevelFilter::from_str(&args.loglevel.clone().unwrap_or("info".into())).unwrap_or(LevelFilter::INFO);
+    let level_filter = LevelFilter::from_str(&args.loglevel.clone().unwrap_or("info".into()))
+        .unwrap_or(LevelFilter::INFO);
 
     // Headers may contain cookies and tokens, so they go only to the dedicated file
     let not_headers = || filter_fn(|metadata| metadata.target() != HEADERS_TARGET);
@@ -158,7 +178,9 @@ fn main() -> ExitCode {
     let mut _headers_guard = None;
     let headers_layer = cfg.log_headers.unwrap_or_default().then(|| {
         let headers_appender = LogRollerBuilder::new("./logs", "headers.json")
-            .rotation(logroller::Rotation::SizeBased(logroller::RotationSize::MB(100)))
+            .rotation(logroller::Rotation::SizeBased(logroller::RotationSize::MB(
+                100,
+            )))
             .max_keep_files(5)
             .time_zone(logroller::TimeZone::Local)
             .graceful_shutdown(true)
@@ -182,8 +204,7 @@ fn main() -> ExitCode {
         .try_init()
         .expect("Could not initialize logging subsystem");
 
-    tui_logger::init_logger(filter)
-        .expect("Failed to initialize logger");
+    tui_logger::init_logger(filter).expect("Failed to initialize logger");
     tui_logger::set_default_level(filter);
 
     let rt = tokio::runtime::Runtime::new().expect("Could not initialize Tokio runtime");
