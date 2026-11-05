@@ -1,9 +1,16 @@
 FROM rust:1.97.1-alpine3.24 AS rust
 
-COPY . /home/rust/src
-RUN apk add musl-dev && cd /home/rust/src && \
-    cargo build --release --target-dir target/x86_64-unknown-linux-musl
+RUN apk add musl-dev
+WORKDIR /home/rust/src
+
+# Build dependencies in a separate layer, cached until Cargo.toml or Cargo.lock change
+COPY Cargo.toml Cargo.lock LICENSE ./
+RUN mkdir src && echo "fn main() {}" > src/main.rs &&     cargo build --release --locked &&     rm -rf src
+
+COPY src src
+# Make sure the real sources are newer than the dummy build
+RUN touch src/main.rs && cargo build --release --locked
 
 FROM scratch
-COPY --from=rust /home/rust/src/target/x86_64-unknown-linux-musl/release/paproxy /paproxy
+COPY --from=rust /home/rust/src/target/release/paproxy /paproxy
 ENTRYPOINT [ "/paproxy" ]
