@@ -9,6 +9,8 @@ pagrid: false
 certificate_path:
 key_path:
 log_headers: false
+# Proxy static files too instead of serving them from sourcedata and help, like --transparent.
+transparent: false
 # Accept any upstream TLS certificate, e.g. a self-signed one.
 # Set to false to verify it against system CAs and the optional upstream_ca_path PEM file.
 insecure_upstream: true

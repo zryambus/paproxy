@@ -1,5 +1,11 @@
 mod app;
 mod cfg;
+#[cfg(feature = "gui")]
+mod gui;
+#[cfg(feature = "gui")]
+mod logbuf;
+#[cfg(feature = "gui")]
+mod profiles;
 mod router;
 mod shutdown;
 mod state;
@@ -16,7 +22,7 @@ use anyhow::Context;
 use axum_server::{Handle, tls_rustls::RustlsConfig};
 use clap::Parser;
 use logroller::LogRollerBuilder;
-use tokio::net::TcpListener;
+use tokio::{net::TcpListener, task::JoinHandle};
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::{
     filter::{FilterExt, filter_fn},
@@ -46,12 +52,42 @@ struct Args {
     /// Log level: error, warn, info, debug or trace [default: info]
     #[arg(long)]
     loglevel: Option<String>,
-    /// Proxy static routes instead of serving local static files
+    /// Proxy static routes instead of serving local static files, like `transparent: true` in the config
     #[arg(short, long)]
     transparent: bool,
-    /// Run without the terminal UI and write logs to stdout
+    /// Run with the terminal UI (the default in builds without the graphical UI)
     #[arg(long)]
+    tui: bool,
+    /// Run without a UI and write logs to stdout
+    #[arg(long, conflicts_with = "tui")]
     headless: bool,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Mode {
+    Tui,
+    Headless,
+    #[cfg(feature = "gui")]
+    Gui,
+}
+
+impl Args {
+    fn mode(&self) -> Mode {
+        if self.headless {
+            return Mode::Headless;
+        }
+        #[cfg(feature = "gui")]
+        if !self.tui {
+            return Mode::Gui;
+        }
+        Mode::Tui
+    }
+}
+
+struct Servers {
+    http: JoinHandle<()>,
+    https: Option<JoinHandle<()>>,
+    https_handle: Handle<SocketAddr>,
 }
 
 async fn load_tls_config(cfg: &Cfg) -> anyhow::Result<Option<RustlsConfig>> {
@@ -74,11 +110,8 @@ async fn load_tls_config(cfg: &Cfg) -> anyhow::Result<Option<RustlsConfig>> {
     Ok(Some(config))
 }
 
-async fn main_impl(cfg: Arc<Cfg>, transparent: bool, headless: bool) -> anyhow::Result<()> {
-    tracing::info!("Logging subsystem initialized correctly");
-
-    let state = Arc::new(State::new());
-    let router = get_router(cfg.clone(), state.clone(), transparent)?;
+async fn start_servers(cfg: Arc<Cfg>, state: Arc<State>) -> anyhow::Result<Servers> {
+    let router = get_router(cfg.clone(), state.clone(), cfg.transparent)?;
 
     let addr = SocketAddr::from(([0, 0, 0, 0], cfg.port));
     let listener = TcpListener::bind(addr)
@@ -86,7 +119,7 @@ async fn main_impl(cfg: Arc<Cfg>, transparent: bool, headless: bool) -> anyhow::
         .with_context(|| format!("Failed to bind HTTP port {}", cfg.port))?;
 
     let https_handle = Handle::new();
-    let https_server = if let Some(tls_config) = load_tls_config(&cfg).await? {
+    let https = if let Some(tls_config) = load_tls_config(&cfg).await? {
         let https_port = cfg
             .https_port
             .context("https_port must be set to enable HTTPS")?;
@@ -109,8 +142,8 @@ async fn main_impl(cfg: Arc<Cfg>, transparent: bool, headless: bool) -> anyhow::
     };
 
     tracing::info!("Starting proxy server at http://0.0.0.0:{}", cfg.port);
-    let shutdown = shutdown_signal(state.clone());
-    let http_server = tokio::spawn(async move {
+    let shutdown = shutdown_signal(state);
+    let http = tokio::spawn(async move {
         if let Err(e) = axum::serve(listener, router.into_make_service())
             .with_graceful_shutdown(shutdown)
             .await
@@ -119,24 +152,27 @@ async fn main_impl(cfg: Arc<Cfg>, transparent: bool, headless: bool) -> anyhow::
         }
     });
 
-    let ui_result = if headless {
-        wait_for_shutdown(state.clone()).await;
-        Ok(())
-    } else {
-        App::new(state.clone()).run().await
-    };
+    Ok(Servers {
+        http,
+        https,
+        https_handle,
+    })
+}
 
-    // Stop the servers even if the TUI failed
+/// Stops the servers and writes the traffic statistics
+async fn stop_servers(servers: Servers, state: &State) {
     state.shutdown();
     // HTTP server observes the shutdown flag by itself, HTTPS server has to be told explicitly
-    https_handle.graceful_shutdown(Some(SHUTDOWN_TIMEOUT));
-    let servers = async {
-        http_server.await.ok();
-        if let Some(https_server) = https_server {
-            https_server.await.ok();
+    servers
+        .https_handle
+        .graceful_shutdown(Some(SHUTDOWN_TIMEOUT));
+    let stopped = async {
+        servers.http.await.ok();
+        if let Some(https) = servers.https {
+            https.await.ok();
         }
     };
-    if tokio::time::timeout(SHUTDOWN_TIMEOUT, servers)
+    if tokio::time::timeout(SHUTDOWN_TIMEOUT, stopped)
         .await
         .is_err()
     {
@@ -149,23 +185,64 @@ async fn main_impl(cfg: Arc<Cfg>, transparent: bool, headless: bool) -> anyhow::
     if let Err(e) = dump_results(state.get_info()) {
         tracing::error!("Failed to write results: {}", e);
     }
+}
 
+async fn main_impl(cfg: Arc<Cfg>, headless: bool) -> anyhow::Result<()> {
+    let state = Arc::new(State::new());
+    let servers = start_servers(cfg, state.clone()).await?;
+
+    let ui_result = if headless {
+        wait_for_shutdown(state.clone()).await;
+        Ok(())
+    } else {
+        App::new(state.clone()).run().await
+    };
+
+    // Stop the servers even if the TUI failed
+    stop_servers(servers, &state).await;
     ui_result
+}
+
+/// GPUI needs the main thread, so the proxy started from the GUI runs on the Tokio worker threads
+#[cfg(feature = "gui")]
+fn run_gui(rt: &tokio::runtime::Runtime, settings: gui::Settings, logs: logbuf::LogBuffer) {
+    let quit = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    rt.spawn({
+        let quit = quit.clone();
+        async move {
+            if tokio::signal::ctrl_c().await.is_ok() {
+                quit.store(true, std::sync::atomic::Ordering::Relaxed);
+            }
+        }
+    });
+
+    let running = gui::RunningSlot::default();
+    gui::run(rt.handle().clone(), settings, running.clone(), quit, logs);
+
+    if let Some(running) = running.take() {
+        rt.block_on(stop_servers(running.servers, &running.state));
+    }
 }
 
 fn main() -> ExitCode {
     let args = Args::parse();
 
-    let cfg = match get_config(args.config.clone()) {
-        Ok(cfg) => cfg,
+    let mode = args.mode();
+
+    // The GUI starts with default settings, which can be fixed in the window
+    let (mut cfg, cfg_error): (Cfg, Option<anyhow::Error>) = match get_config(args.config.clone()) {
+        Ok(cfg) => (cfg, None),
+        #[cfg(feature = "gui")]
+        Err(e) if mode == Mode::Gui => (Cfg::default(), Some(e)),
         Err(e) => {
             eprintln!("Exiting with error: {:?}", e);
             return ExitCode::FAILURE;
         }
     };
+    cfg.transparent |= args.transparent;
 
     // The TUI draws to stderr
-    if !args.headless && !std::io::stderr().is_terminal() {
+    if mode == Mode::Tui && !std::io::stderr().is_terminal() {
         eprintln!(
             "Exiting with error: no terminal available, use --headless to run without the TUI"
         );
@@ -205,7 +282,12 @@ fn main() -> ExitCode {
         .with_filter(level_filter.and(not_headers()));
 
     let mut _headers_guard = None;
-    let headers_layer = cfg.log_headers.then(|| {
+    // Header logging can be enabled in the GUI at any time
+    #[cfg(feature = "gui")]
+    let log_headers = cfg.log_headers || mode == Mode::Gui;
+    #[cfg(not(feature = "gui"))]
+    let log_headers = cfg.log_headers;
+    let headers_layer = log_headers.then(|| {
         let headers_appender = LogRollerBuilder::new("./logs", "headers.json")
             .rotation(logroller::Rotation::SizeBased(logroller::RotationSize::MB(
                 100,
@@ -226,9 +308,10 @@ fn main() -> ExitCode {
             .with_filter(filter_fn(|metadata| metadata.target() == HEADERS_TARGET))
     });
 
-    let tui_layer = (!args.headless).then(|| TuiTracingSubscriberLayer.with_filter(not_headers()));
+    let tui_layer =
+        (mode == Mode::Tui).then(|| TuiTracingSubscriberLayer.with_filter(not_headers()));
 
-    let console_layer = args.headless.then(|| {
+    let console_layer = (mode == Mode::Headless).then(|| {
         tracing_subscriber::fmt::layer()
             .with_writer(std::io::stdout)
             .with_ansi(std::io::stdout().is_terminal())
@@ -236,21 +319,47 @@ fn main() -> ExitCode {
             .with_filter(level_filter.and(not_headers()))
     });
 
+    #[cfg(feature = "gui")]
+    let logs = logbuf::LogBuffer::default();
+    #[cfg(feature = "gui")]
+    let gui_layer =
+        (mode == Mode::Gui).then(|| logs.layer().with_filter(level_filter.and(not_headers())));
+    #[cfg(not(feature = "gui"))]
+    let gui_layer: Option<tracing_subscriber::layer::Identity> = None;
+
     Registry::default()
         .with(tui_layer)
         .with(console_layer)
+        .with(gui_layer)
         .with(fmt)
         .with(headers_layer)
         .try_init()
         .expect("Could not initialize logging subsystem");
 
-    if !args.headless {
+    if mode == Mode::Tui {
         tui_logger::init_logger(filter).expect("Failed to initialize logger");
         tui_logger::set_default_level(filter);
     }
 
+    tracing::info!("Logging subsystem initialized correctly");
+    if let Some(e) = cfg_error {
+        tracing::warn!("Using default settings: {:#}", e);
+    }
+
     let rt = tokio::runtime::Runtime::new().expect("Could not initialize Tokio runtime");
-    if let Err(e) = rt.block_on(main_impl(cfg, args.transparent, args.headless)) {
+
+    #[cfg(feature = "gui")]
+    if mode == Mode::Gui {
+        let settings = gui::Settings {
+            cfg,
+            config_path: args.config.unwrap_or_else(|| "config.yml".into()),
+        };
+        run_gui(&rt, settings, logs);
+        return ExitCode::SUCCESS;
+    }
+
+    let result = rt.block_on(main_impl(Arc::new(cfg), mode == Mode::Headless));
+    if let Err(e) = result {
         tracing::error!("Exiting with error: {}", e);
         eprintln!("Exiting with error: {:?}", e);
         return ExitCode::FAILURE;

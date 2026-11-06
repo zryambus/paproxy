@@ -14,7 +14,8 @@ static files locally, and displays traffic statistics in a terminal UI.
 - Proxies HTTP, HTTPS, and WebSocket traffic to an upstream server.
 - Optionally serves static application and help files locally.
 - Can accept incoming HTTPS connections when a certificate and key are set.
-- Shows request and traffic statistics in a terminal UI.
+- Shows request and traffic statistics in a terminal UI or, optionally, a
+  graphical UI.
 - Rotates application logs and can optionally log proxied HTTP headers.
 
 ### Requirements
@@ -33,10 +34,40 @@ cargo build --release
 The resulting executable is `target/release/paproxy` (`paproxy.exe` on
 Windows).
 
-To build the native executable and the Docker image export, use:
+The graphical UI is optional and enabled by the `gui` feature:
+
+```powershell
+cargo build --release --features gui
+```
+
+On Linux the GUI build needs the X11/Wayland development packages, for example
+on Debian or Ubuntu:
+
+```sh
+sudo apt-get install cmake clang pkg-config libfontconfig-dev libfreetype-dev   libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev libx11-xcb-dev   libxcb1-dev libvulkan-dev
+```
+
+To build the release binaries, use:
 
 ```powershell
 just release
+```
+
+It produces in `build/`:
+
+- `paproxy.exe` — Windows executable with the terminal and graphical UI.
+- `paproxy` — static Linux executable with the terminal UI, built in Docker.
+- `paproxy-gui` — Linux executable with the terminal and graphical UI, built in
+  Docker. It requires glibc, libxcb, libxkbcommon, libxkbcommon-x11 and a
+  Vulkan driver, which a Linux desktop usually has.
+
+The application icon is in `assets/icons`; the Windows executable embeds it.
+To add PAProxy with its icon to a Linux desktop menu, put `paproxy-gui` on
+`PATH` and run from the repository:
+
+```sh
+cp -r assets/icons/hicolor ~/.local/share/icons/
+cp assets/linux/paproxy.desktop ~/.local/share/applications/
 ```
 
 ### Configuration
@@ -53,6 +84,7 @@ pagrid: false
 certificate_path:
 key_path:
 log_headers: false
+transparent: false
 insecure_upstream: true
 upstream_ca_path:
 ```
@@ -68,6 +100,7 @@ upstream_ca_path:
 | `certificate_path` | PEM certificate-chain path for the incoming HTTPS server. Leave empty to disable it. |
 | `key_path` | PEM private-key path for the incoming HTTPS server. Leave empty to disable it. |
 | `log_headers` | When `true`, records proxied HTTP request and response headers in `logs/headers.json`. Defaults to `false`. |
+| `transparent` | When `true`, proxies static routes too instead of serving them from `sourcedata` and `help`, like `--transparent`. Defaults to `false`. |
 | `insecure_upstream` | When `true` (default), accepts any upstream TLS certificate, including self-signed ones. When `false`, verifies it against system CA certificates and `upstream_ca_path`. |
 | `upstream_ca_path` | PEM file with additional CA certificates trusted for the upstream server. Used only when `insecure_upstream` is `false`. |
 
@@ -99,15 +132,36 @@ Available options:
 --config <PATH>     Path to a YAML configuration file
 --loglevel <LEVEL>  Log level, for example: error, warn, info, debug, trace
 -t, --transparent   Proxy static routes instead of serving local static files
---headless          Run without the terminal UI and write logs to stdout
+--tui               Run with the terminal UI
+--headless          Run without a UI and write logs to stdout
 ```
 
+Builds with the `gui` feature open the graphical UI by default; use `--tui` or
+`--headless` to run them in a console. Builds without it start the terminal UI.
+
+The graphical UI does not start the proxy by itself. It loads the settings,
+lets you edit them and press **Start**; paths can be picked with the folder
+button next to their fields. Settings are locked while the proxy runs; press
+**Stop** to change them.
+
+Settings are kept in profiles, for example one per PolyAnalyst server:
+
+- **Default** is the configuration file itself. If it is missing or invalid,
+  the window starts with default values.
+- Other profiles are files of the same format in the `profiles` directory next
+  to the configuration file, so any of them also works with `--config`, for
+  example `--config profiles/stage.yml`.
+- The profile list switches between them, **Save** writes the settings into the
+  selected profile keeping its comments, **Save as** creates a new profile with
+  the entered name, and the delete button removes the selected one.
+- The window reopens the last selected profile.
+
 Application logs are stored under `logs/` and rotated by size. Traffic
-statistics are written to `logs/results.csv` on exit. Press `Ctrl+C` to stop
-the proxy gracefully.
+statistics are written to `logs/results.csv` when the proxy stops. Close the
+window or press `Ctrl+C` to stop the proxy gracefully.
 
 Use `--headless` when no terminal is available, for example in Docker or when
-running PAProxy as a service. Without it PAProxy refuses to start outside a
+running PAProxy as a service. The terminal UI refuses to start outside a
 terminal.
 
 ### Docker
@@ -126,7 +180,8 @@ flags of `docker run`.
 
 PAProxy — обратный прокси-сервер для PolyAnalyst 6 и PolyAnalyst Grid. Он
 перенаправляет HTTP- и WebSocket-запросы на сервер PolyAnalyst, при необходимости
-раздаёт локальные статические файлы и показывает статистику трафика в терминале.
+раздаёт локальные статические файлы и показывает статистику трафика в терминале
+или в графическом интерфейсе.
 
 ### Возможности
 
@@ -134,7 +189,8 @@ PAProxy — обратный прокси-сервер для PolyAnalyst 6 и P
 - Проксирование HTTP, HTTPS и WebSocket-трафика на upstream-сервер.
 - Локальная раздача статических файлов приложения и справки.
 - Входящий HTTPS при настройке сертификата и ключа.
-- Терминальный интерфейс со статистикой запросов и трафика.
+- Терминальный или, по желанию, графический интерфейс со статистикой запросов и
+  трафика.
 - Ротация журналов и опциональное логирование HTTP-заголовков.
 
 ### Требования
@@ -153,10 +209,42 @@ cargo build --release
 Исполняемый файл будет создан в `target/release/paproxy` (`paproxy.exe` в
 Windows).
 
-Для сборки нативного исполняемого файла и Docker-образа используйте:
+Графический интерфейс необязателен и включается фичей `gui`:
+
+```powershell
+cargo build --release --features gui
+```
+
+В Linux для сборки с GUI нужны пакеты разработки X11/Wayland, например в Debian
+или Ubuntu:
+
+```sh
+sudo apt-get install cmake clang pkg-config libfontconfig-dev libfreetype-dev   libwayland-dev libxkbcommon-dev libxkbcommon-x11-dev libx11-xcb-dev   libxcb1-dev libvulkan-dev
+```
+
+Для сборки релизных исполняемых файлов используйте:
 
 ```powershell
 just release
+```
+
+В каталоге `build/` появятся:
+
+- `paproxy.exe` — исполняемый файл для Windows с терминальным и графическим
+  интерфейсом.
+- `paproxy` — статический исполняемый файл для Linux с терминальным интерфейсом,
+  собирается в Docker.
+- `paproxy-gui` — исполняемый файл для Linux с терминальным и графическим
+  интерфейсом, собирается в Docker. Требует glibc, libxcb, libxkbcommon,
+  libxkbcommon-x11 и драйвер Vulkan, которые обычно есть в Linux с рабочим столом.
+
+Иконка приложения лежит в `assets/icons`, в исполняемый файл для Windows она
+встроена. Чтобы добавить PAProxy с иконкой в меню рабочего стола Linux, положите
+`paproxy-gui` в каталог из `PATH` и выполните из корня репозитория:
+
+```sh
+cp -r assets/icons/hicolor ~/.local/share/icons/
+cp assets/linux/paproxy.desktop ~/.local/share/applications/
 ```
 
 ### Настройка
@@ -173,6 +261,7 @@ pagrid: false
 certificate_path:
 key_path:
 log_headers: false
+transparent: false
 insecure_upstream: true
 upstream_ca_path:
 ```
@@ -188,6 +277,7 @@ upstream_ca_path:
 | `certificate_path` | Путь к PEM-цепочке сертификатов для входящего HTTPS. Оставьте пустым, чтобы отключить HTTPS. |
 | `key_path` | Путь к PEM-приватному ключу для входящего HTTPS. Оставьте пустым, чтобы отключить HTTPS. |
 | `log_headers` | При `true` записывает заголовки проксируемых HTTP-запросов и ответов в `logs/headers.json`. По умолчанию `false`. |
+| `transparent` | При `true` проксирует и статические маршруты вместо раздачи из `sourcedata` и `help`, как `--transparent`. По умолчанию `false`. |
 | `insecure_upstream` | При `true` (по умолчанию) принимается любой TLS-сертификат upstream-сервера, в том числе самоподписанный. При `false` сертификат проверяется по системным корневым сертификатам и `upstream_ca_path`. |
 | `upstream_ca_path` | Путь к PEM-файлу с дополнительными корневыми сертификатами для проверки upstream-сервера. Используется, только если `insecure_upstream` равен `false`. |
 
@@ -220,15 +310,37 @@ upstream_ca_path:
 --config <PATH>     Путь к YAML-файлу конфигурации
 --loglevel <LEVEL>  Уровень логирования: error, warn, info, debug или trace
 -t, --transparent   Проксировать статические маршруты вместо локальной раздачи файлов
---headless          Работать без терминального интерфейса, журнал выводить в stdout
+--tui               Запустить терминальный интерфейс
+--headless          Работать без интерфейса, журнал выводить в stdout
 ```
 
+Сборки с фичей `gui` по умолчанию открывают графический интерфейс; для запуска
+в консоли используйте `--tui` или `--headless`. Сборки без неё запускают
+терминальный интерфейс.
+
+Графический интерфейс не запускает прокси сам. Он загружает настройки,
+позволяет их изменить и запустить прокси кнопкой **Start**; пути можно выбрать
+кнопкой с папкой рядом с полем. Пока прокси работает, настройки заблокированы;
+чтобы изменить их, нажмите **Stop**.
+
+Настройки хранятся в профилях, например по одному на сервер PolyAnalyst:
+
+- **Default** — сам файл конфигурации. Если его нет или он некорректен, окно
+  открывается со значениями по умолчанию.
+- Остальные профили — файлы того же формата в каталоге `profiles` рядом с файлом
+  конфигурации, поэтому любой из них подходит и для `--config`, например
+  `--config profiles/stage.yml`.
+- Список профилей переключает их, **Save** записывает настройки в выбранный
+  профиль с сохранением комментариев, **Save as** создаёт новый профиль с
+  введённым именем, кнопка удаления удаляет выбранный.
+- Окно открывается с последним выбранным профилем.
+
 Журналы приложения хранятся в `logs/` и ротируются по размеру. Статистика
-трафика при выходе записывается в `logs/results.csv`. Для корректной остановки
-прокси нажмите `Ctrl+C`.
+трафика записывается в `logs/results.csv` при остановке прокси. Для корректной
+остановки закройте окно или нажмите `Ctrl+C`.
 
 Используйте `--headless`, если терминала нет, например в Docker или при запуске
-PAProxy как службы. Без этого флага вне терминала PAProxy не запустится.
+PAProxy как службы. Терминальный интерфейс вне терминала не запустится.
 
 ### Docker
 

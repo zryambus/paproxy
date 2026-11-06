@@ -134,6 +134,7 @@ mod tests {
             host: "localhost:5043".into(),
             pagrid: false,
             log_headers: false,
+            transparent: false,
             insecure_upstream,
             upstream_ca_path: upstream_ca_path.map(Into::into),
         }

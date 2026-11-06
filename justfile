@@ -4,6 +4,6 @@ set shell := ["powershell.exe", "-c"]
 release:
     mkdir -Path build -Force
     Get-ChildItem -Path build -File | Remove-Item
-    cargo build --release --locked
+    cargo build --release --locked --features gui
     cp target/release/paproxy.exe ./build
-    docker build --output=build .
+    docker build --target release --output=build .

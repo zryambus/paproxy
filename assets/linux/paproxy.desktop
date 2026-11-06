@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=PAProxy
+Comment=Reverse proxy for PolyAnalyst
+Exec=paproxy-gui
+Icon=paproxy
+Terminal=false
+Categories=Network;Development;
+StartupWMClass=paproxy

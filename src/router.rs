@@ -367,7 +367,7 @@ async fn handle_socket(
 fn get_static_root<'a>(path: &'a Option<String>, name: &str) -> anyhow::Result<&'a Path> {
     path.as_deref()
         .map(Path::new)
-        .with_context(|| format!("{} must be set unless --transparent is used", name))
+        .with_context(|| format!("{} must be set unless transparent mode is used", name))
 }
 
 fn get_static_serve_service(path: &Path, sub_path: Option<&str>) -> ServeDir {
@@ -520,6 +520,7 @@ mod tests {
             host: UNREACHABLE_HOST.into(),
             pagrid,
             log_headers: false,
+            transparent: false,
             insecure_upstream: true,
             upstream_ca_path: None,
         })

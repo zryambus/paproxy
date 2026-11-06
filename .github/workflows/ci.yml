@@ -23,13 +23,22 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
+        features: ["", "--features gui"]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
+      - name: Install GUI dependencies
+        if: runner.os == 'Linux' && matrix.features != ''
+        run: >-
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends
+          libfontconfig-dev libfreetype-dev libwayland-dev libxkbcommon-dev
+          libxkbcommon-x11-dev libx11-xcb-dev libxcb1-dev libvulkan-dev
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy --all-targets --locked -- -D warnings
-      - run: cargo build --locked
-      - run: cargo test --locked
+        with:
+          key: ${{ matrix.features }}
+      - run: cargo clippy --all-targets --locked ${{ matrix.features }} -- -D warnings
+      - run: cargo build --locked ${{ matrix.features }}
+      - run: cargo test --locked ${{ matrix.features }}
